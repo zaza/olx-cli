@@ -24,6 +24,11 @@ _HEADERS = {
     "User-Agent": _USER_AGENT,
     "Origin": "https://www.olx.pl",
     "Referer": "https://www.olx.pl/",
+    "Accept": "*/*",
+    "Accept-Language": "pl-PL,pl;q=0.9,en-US;q=0.8,en;q=0.7",
+    "Sec-Fetch-Dest": "empty",
+    "Sec-Fetch-Mode": "cors",
+    "Sec-Fetch-Site": "cross-site",
 }
 
 

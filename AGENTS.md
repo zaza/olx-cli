@@ -26,6 +26,8 @@ When running via agent, prefer `--json` for structured output:
 python3 -m olx_cli search rower -l krakow --json
 # With category:
 python3 -m olx_cli search fiat -c motoryzacja/samochody -l krakow --json
+# By user ID (any user, scraped from SSR HTML):
+python3 -m olx_cli search --user USER_ID --json
 ```
 
 List available categories:
@@ -36,11 +38,16 @@ python3 -m olx_cli categories
 ## Authentication
 
 ```sh
-# Login (reads credentials.txt from CWD)
+# Login (reads credentials.txt from CWD, outputs user ID for chaining)
 python3 -m olx_cli login
 
 # Show profile (prefer --json for agent usage):
 python3 -m olx_cli me --json
+
+# Show my offers:
+python3 -m olx_cli search --user me --json
+# or via search with user ID from login:
+python3 -m olx_cli search --user $(python3 -m olx_cli login) --json --max-pages 2
 
 # Logout
 python3 -m olx_cli logout

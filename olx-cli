@@ -1,2 +1,12 @@
 #!/bin/sh
-cd "$(dirname "$0")" && exec python3 -m olx_cli "$@"
+set -e
+cd "$(dirname "$0")"
+if [ -f .venv/bin/python3 ]; then
+    PY=".venv/bin/python3"
+else
+    PY="python3"
+fi
+if ! "$PY" -c "import click" 2>/dev/null; then
+    "$PY" -m pip install -q -r requirements.txt
+fi
+exec "$PY" -m olx_cli "$@"

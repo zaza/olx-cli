@@ -21,7 +21,113 @@ _HEADERS = {
     "User-Agent": _USER_AGENT,
 }
 
+_PRERENDERED_STATE_RE = re.compile(
+    r'window\.__PRERENDERED_STATE__\s*=\s*"(.+?)"\s*;'
+)
+
 log = logging.getLogger(__name__)
+
+
+def _api_offers_to_offers(resp_data: dict) -> List[OlxOffer]:
+    offers: List[OlxOffer] = []
+    for item in resp_data.get("data", []):
+        offers.append(OlxOffer.from_api_offer(item))
+    return offers
+
+
+def _has_api_next(resp_data: dict) -> bool:
+    return "next" in resp_data.get("links", {})
+
+
+def fetch_my_offers(
+    access_token: str,
+    max_pages: Optional[int] = 5,
+) -> List[OlxOffer]:
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "User-Agent": _USER_AGENT,
+        "Accept": "application/json",
+    }
+    offers: List[OlxOffer] = []
+    offset = 0
+    page = 1
+
+    while True:
+        url = f"https://www.olx.pl/api/v1/users/me/offers/?offset={offset}"
+        log.debug("Fetching my offers page %d", page)
+        resp = requests.get(url, headers=headers, timeout=_PAGE_TIMEOUT)
+        if resp.status_code != 200:
+            log.warning("My offers API returned HTTP %s", resp.status_code)
+            break
+
+        data = resp.json()
+        page_offers = _api_offers_to_offers(data)
+        if not page_offers:
+            break
+        offers.extend(page_offers)
+
+        if not _has_api_next(data):
+            break
+
+        if max_pages is not None and page >= max_pages:
+            log.info("Reached max pages (%d)", max_pages)
+            break
+
+        offset += len(page_offers)
+        page += 1
+
+    return offers
+
+
+def _parse_ssr_user_offers(html: str) -> tuple[list[OlxOffer], int, int] | None:
+    """Parse __PRERENDERED_STATE__ from a user listing page.
+
+    Returns (offers, total_elements, total_pages) or None if SSR data is missing.
+    """
+    import json
+
+    m = _PRERENDERED_STATE_RE.search(html)
+    if not m:
+        return None
+
+    raw = m.group(1)
+    js_value = json.loads('"' + raw + '"')
+    state = json.loads(js_value)
+    listing = state.get('userListing', {}).get('userListing', {})
+    ads = listing.get('ads', [])
+    offers = [OlxOffer.from_user_listing_offer(ad) for ad in ads]
+    return offers, listing.get('totalElements', 0), listing.get('totalPages', 0)
+
+
+def fetch_user_offers_html(
+    user_id: str,
+    max_pages: Optional[int] = 5,
+) -> List[OlxOffer]:
+    offers: List[OlxOffer] = []
+    total_pages = 0
+
+    for page in range(1, max_pages + 1):
+        url = f'https://www.olx.pl/oferty/uzytkownik/{user_id}/'
+        if page > 1:
+            url += f'?page={page}'
+
+        resp = requests.get(url, headers=_HEADERS, timeout=_PAGE_TIMEOUT)
+        resp.raise_for_status()
+
+        result = _parse_ssr_user_offers(resp.text)
+        if result is None:
+            log.warning('__PRERENDERED_STATE__ not found on user page %d', page)
+            break
+
+        page_offers, total_elements, total_pages = result
+        if not page_offers:
+            break
+        offers.extend(page_offers)
+
+        if page >= total_pages:
+            break
+
+    return offers
 
 
 class OlxScrapper:

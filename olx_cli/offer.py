@@ -29,6 +29,45 @@ class OlxOffer:
         return all(k in title_lower for k in kw)
 
     @classmethod
+    def from_user_listing_offer(cls, data: dict) -> OlxOffer:
+        price = data.get('price', {}).get('displayValue', '')
+        city = data.get('location', {}).get('cityName', '')
+        photos = data.get('photos', [])
+        photo = photos[0] if photos else None
+        return cls(
+            title=data.get('title', ''),
+            price=price,
+            url=data.get('url', ''),
+            city=city,
+            photo=photo,
+        )
+
+    @classmethod
+    def from_api_offer(cls, data: dict) -> OlxOffer:
+        price = ''
+        for p in data.get('params', []):
+            if p.get('key') == 'price':
+                price = p.get('value', {}).get('label', '')
+                break
+
+        photos = data.get('photos', [])
+        photo = photos[0].get('link', '') if photos else None
+
+        city = (
+            data.get('location', {})
+            .get('city', {})
+            .get('name', '')
+        )
+
+        return cls(
+            title=data.get('title', ''),
+            price=price,
+            url=data.get('url', ''),
+            city=city,
+            photo=photo,
+        )
+
+    @classmethod
     def from_element(cls, element: Tag) -> OlxOffer:
         title = element.select_one("h4").get_text(strip=True)
 
