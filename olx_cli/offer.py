@@ -63,6 +63,14 @@ class OlxOffer:
     city: str
     photo: Optional[str] = None
 
+    @property
+    def is_negotiable(self) -> bool:
+        return 'do negocjacji' in self.price.lower()
+
+    @property
+    def clean_price(self) -> str:
+        return self.price.lower().replace('do negocjacji', '').strip()
+
     @staticmethod
     def _keywords(query: str) -> List[str]:
         return query.lower().split()

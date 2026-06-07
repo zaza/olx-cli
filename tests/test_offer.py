@@ -142,3 +142,24 @@ class TestComputeStats:
         assert stats['skipped'] == 1
         assert stats['average'] == 150
         assert stats['median'] == 150
+
+class TestNegotiablePrice:
+    def test_pure_negotiable(self):
+        o = _offer('do negocjacji')
+        assert o.is_negotiable is True
+        assert o.clean_price == ''
+
+    def test_price_with_negotiable(self):
+        o = _offer('320 złdo negocjacji')
+        assert o.is_negotiable is True
+        assert o.clean_price == '320 zł'
+
+    def test_not_negotiable(self):
+        o = _offer('320 zł')
+        assert o.is_negotiable is False
+        assert o.clean_price == '320 zł'
+
+    def test_case_insensitivity(self):
+        o = _offer('320 złDO NEGOCJACJI')
+        assert o.is_negotiable is True
+        assert o.clean_price == '320 zł'

@@ -31,7 +31,8 @@ def _print_table(offers, description, total, url, json_output, stats=None):
             "offers": [
                 {
                     "title": o.title,
-                    "price": o.price,
+                    "price": o.clean_price,
+                    "is_negotiable": o.is_negotiable,
                     "url": o.url,
                     "city": o.city,
                     "photo": o.photo,
@@ -60,7 +61,11 @@ def _print_table(offers, description, total, url, json_output, stats=None):
 
     title_w = max(len(o.title) for o in offers)
     title_w = max(title_w, len("Title"))
-    price_w = max(len(o.price) for o in offers)
+    
+    def get_display_price(o):
+        return f"*{o.clean_price}" if o.is_negotiable else o.clean_price
+        
+    price_w = max(len(get_display_price(o)) for o in offers)
     price_w = max(price_w, len("Price"))
     city_w = max(len(o.city) for o in offers)
     city_w = max(city_w, len("Location"))
@@ -71,7 +76,7 @@ def _print_table(offers, description, total, url, json_output, stats=None):
     click.echo(sep)
     for o in offers:
         click.echo(
-            f"{o.title:<{title_w}}  {o.price:>{price_w}}  {o.city:<{city_w}}"
+            f"{o.title:<{title_w}}  {get_display_price(o):>{price_w}}  {o.city:<{city_w}}"
         )
     click.echo()
     click.echo(f"URL: {url}")
