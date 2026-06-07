@@ -39,6 +39,17 @@ python3 -m olx_cli categories
 python3 -m pytest tests/ -v
 ```
 
+## Test CI workflow locally (act)
+
+Requires Docker and valid `gh` auth:
+
+```sh
+# Test the full CI pipeline locally
+act -j test
+```
+
+If `act` fails with "authentication required" when cloning actions, first run `gh auth status` to verify your token is valid. If needed, re-authenticate: `gh auth login`.
+
 ## Code style
 
 - Python 3.14+, uses `from __future__ import annotations`

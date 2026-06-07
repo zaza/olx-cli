@@ -1,5 +1,6 @@
 # olx-cli
 
+[![CI](https://github.com/zaza/olx-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/zaza/olx-cli/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 CLI tool for searching and scraping offers from [OLX.pl](https://www.olx.pl), the Polish classifieds marketplace. Built with Python, Click, requests, and BeautifulSoup.
