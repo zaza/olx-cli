@@ -61,6 +61,19 @@ def cli():
     pass
 
 
+def _validate_category(category: str | None) -> str | None:
+    if category is None:
+        return None
+    from olx_cli.category import validate as validate_category
+
+    try:
+        validate_category(category)
+    except ValueError as e:
+        click.echo(f"Error: {e}", err=True)
+        raise click.Abort from e
+    return category.strip("/")
+
+
 @cli.command()
 @click.argument("query")
 @click.option("-p", "--photo-only", is_flag=True, help="Only offers with photos")
@@ -73,6 +86,7 @@ def cli():
 )
 @click.option("-m", "--min-price", type=int, help="Minimum price")
 @click.option("-M", "--max-price", type=int, help="Maximum price")
+@click.option("-c", "--category", help="Category slug (e.g. 'motoryzacja/samochody')")
 @click.option(
     "--max-pages",
     type=int,
@@ -86,7 +100,9 @@ def cli():
     help="Disable page limit (scrapes all pages)",
 )
 @click.option("--json", "json_output", is_flag=True, help="Output as JSON")
-def search(query, photo_only, location, radius, min_price, max_price, max_pages, no_max_pages, json_output):
+def search(query, photo_only, location, radius, min_price, max_price, category, max_pages, no_max_pages, json_output):
+    category = _validate_category(category)
+
     url = build_url(
         query=query,
         photo_only=photo_only,
@@ -94,6 +110,7 @@ def search(query, photo_only, location, radius, min_price, max_price, max_pages,
         radius=radius,
         min_price=min_price,
         max_price=max_price,
+        category=category,
     )
 
     if no_max_pages:
@@ -102,10 +119,22 @@ def search(query, photo_only, location, radius, min_price, max_price, max_pages,
     scrapper = OlxScrapper(url, max_pages=max_pages)
     offers = scrapper.get_offers()
 
-    desc = describe(query, photo_only=photo_only)
+    desc = describe(query, photo_only=photo_only, category=category)
     total = len(offers)
 
     _print_table(offers, desc, total, url, json_output)
+
+
+@cli.command()
+def categories():
+    from olx_cli.category import get_cached, ensure_cached
+
+    cats = ensure_cached()
+    if not cats:
+        click.echo("Failed to fetch categories. Check your internet connection.", err=True)
+        raise click.Abort
+    for c in cats:
+        click.echo(c)
 
 
 def main():

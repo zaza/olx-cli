@@ -22,6 +22,7 @@ def build_url(
     radius: Optional[int] = None,
     min_price: Optional[int] = None,
     max_price: Optional[int] = None,
+    category: Optional[str] = None,
 ) -> str:
     if radius is not None:
         if location is None:
@@ -39,9 +40,12 @@ def build_url(
 
     path_parts = []
 
+    if category:
+        path_parts.append(category.strip("/"))
+
     if location:
         path_parts.append(_deaccent(location))
-    else:
+    elif not category:
         path_parts.append("oferty")
 
     if query:
@@ -66,8 +70,10 @@ def build_url(
     return urlunparse(("https", "www.olx.pl", path, "", query_string, ""))
 
 
-def describe(query: str, *, photo_only: bool) -> str:
+def describe(query: str, *, photo_only: bool, category: Optional[str] = None) -> str:
     desc = f"'{query}'"
+    if category:
+        desc += f" in category '{category}'"
     if photo_only:
         desc += " with photo"
     return desc

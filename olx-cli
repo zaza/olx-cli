@@ -1,2 +1,2 @@
 #!/bin/sh
-cd "$(dirname "$0")" && exec python -m olx_cli "$@"
+cd "$(dirname "$0")" && exec python3 -m olx_cli "$@"

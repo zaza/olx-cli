@@ -21,8 +21,13 @@ class TestCliHelp:
         result = runner.invoke(cli, ["search", "--help"])
         assert result.exit_code == 0
         for opt in ["--photo-only", "--location", "--radius", "--min-price",
-                    "--max-price", "--max-pages", "--no-max-pages", "--json"]:
+                    "--max-price", "--category", "--max-pages", "--no-max-pages", "--json"]:
             assert opt in result.output
+
+    def test_categories_help(self, runner):
+        result = runner.invoke(cli, ["categories", "--help"])
+        assert result.exit_code == 0
+        assert "categories" in result.output
 
 
 class TestCliValidation:
@@ -33,6 +38,11 @@ class TestCliValidation:
     def test_min_gt_max_fails(self, runner):
         result = runner.invoke(cli, ["search", "opel", "-m", "2000", "-M", "100"])
         assert result.exit_code != 0
+
+    def test_invalid_category_fails(self, runner):
+        result = runner.invoke(cli, ["search", "opel", "-c", "invalid/category"])
+        assert result.exit_code != 0
+        assert "Error" in result.output
 
 
 class TestCliOutput:

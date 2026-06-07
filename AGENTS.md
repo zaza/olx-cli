@@ -7,7 +7,7 @@ A CLI tool that scrapes OLX.pl (Polish classifieds) for offers matching a search
 ## Setup commands
 
 ```sh
-python -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 ```
@@ -17,19 +17,26 @@ pip install -r requirements.txt
 ```sh
 ./olx-cli search <query> [options]
 # or
-python -m olx_cli search <query> [options]
+python3 -m olx_cli search <query> [options]
 ```
 
 When running via agent, prefer `--json` for structured output:
 
 ```sh
-python -m olx_cli search rower -l krakow --json
+python3 -m olx_cli search rower -l krakow --json
+# With category:
+python3 -m olx_cli search fiat -c motoryzacja/samochody -l krakow --json
+```
+
+List available categories:
+```sh
+python3 -m olx_cli categories
 ```
 
 ## Run tests
 
 ```sh
-python -m pytest tests/ -v
+python3 -m pytest tests/ -v
 ```
 
 ## Code style

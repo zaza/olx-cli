@@ -23,6 +23,33 @@ class TestDeaccent:
         assert _deaccent("") == ""
 
 
+class TestBuildUrlCategory:
+    def test_category_in_url(self):
+        url = build_url("opel", category="motoryzacja")
+        assert "/motoryzacja/" in url
+
+    def test_category_without_location_no_oferty(self):
+        url = build_url("opel", category="motoryzacja")
+        assert "/motoryzacja/q-opel/" in url
+        assert "/oferty/" not in url
+
+    def test_category_no_query_no_location(self):
+        url = build_url("", category="elektronika")
+        assert "/elektronika/" in url
+        assert url.endswith("/elektronika/")
+
+    def test_category_with_location(self):
+        url = build_url("opel", category="motoryzacja/samochody", location="Kraków")
+        assert "/motoryzacja/samochody/" in url
+        assert "Krakow" in url
+        assert "/oferty/" not in url
+
+    def test_category_with_slash_stripped(self):
+        url = build_url("opel", category="motoryzacja/")
+        assert "/motoryzacja/" in url
+
+
+
 class TestBuildUrl:
     def test_basic_query(self):
         url = build_url("rower górski")
@@ -112,3 +139,11 @@ class TestDescribe:
 
     def test_with_photo(self):
         assert describe("rower", photo_only=True) == "'rower' with photo"
+
+    def test_with_category(self):
+        assert describe("auto", photo_only=False, category="motoryzacja") == "'auto' in category 'motoryzacja'"
+
+    def test_with_category_and_photo(self):
+        d = describe("auto", photo_only=True, category="motoryzacja")
+        assert "'auto' in category 'motoryzacja'" in d
+        assert "with photo" in d
