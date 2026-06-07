@@ -6,12 +6,13 @@ from pathlib import Path
 
 import click
 
+from olx_cli.offer import compute_stats
 from olx_cli.query import build_url, describe
 from olx_cli.radius import KNOWN_RADII
 from olx_cli.scrapper import OlxScrapper, fetch_my_offers, fetch_user_offers_html
 
 
-def _print_table(offers, description, total, url, json_output):
+def _print_table(offers, description, total, url, json_output, stats=None):
     if json_output:
         data = {
             "query": description,
@@ -28,11 +29,20 @@ def _print_table(offers, description, total, url, json_output):
                 for o in offers
             ],
         }
+        if stats:
+            data['stats'] = stats
         json.dump(data, sys.stdout, indent=2, ensure_ascii=False)
         sys.stdout.write("\n")
         return
 
     click.echo(f"Found {total} offers for {description}")
+    if stats:
+        click.echo(
+            f"  Pages: {stats['pages_visited']}  "
+            f"Avg price: {stats['average'] or 'N/A'} zł  "
+            f"Median: {stats['median'] or 'N/A'} zł  "
+            f"(skipped {stats['skipped']} non-monetary)"
+        )
     click.echo()
 
     if not offers:
@@ -217,13 +227,15 @@ def search(query, photo_only, location, radius, min_price, max_price, category, 
                 raise click.Abort
 
             uid = tokens.get('user_id', '?')
-            offers = fetch_my_offers(tokens['AccessToken'], max_pages=max_pages)
+            offers, pages = fetch_my_offers(tokens['AccessToken'], max_pages=max_pages)
             url = f"https://www.olx.pl/mojolx/"
             desc = f"my offers ({uid})"
+            stats = compute_stats(offers, pages)
         else:
             url = f"https://www.olx.pl/oferty/uzytkownik/{user_id}/"
-            offers = fetch_user_offers_html(user_id, max_pages=max_pages)
+            offers, pages = fetch_user_offers_html(user_id, max_pages=max_pages)
             desc = f"offers by user ({user_id})"
+            stats = compute_stats(offers, pages)
     else:
         if not query:
             click.echo("Error: QUERY is required.", err=True)
@@ -244,10 +256,11 @@ def search(query, photo_only, location, radius, min_price, max_price, category, 
         offers = [o for o in offers if o.matches_keywords(query)]
 
         desc = describe(query, photo_only=photo_only, category=category)
+        stats = compute_stats(offers, scrapper.pages_visited)
 
     total = len(offers)
 
-    _print_table(offers, desc, total, url, json_output)
+    _print_table(offers, desc, total, url, json_output, stats=stats)
 
 
 @cli.command()

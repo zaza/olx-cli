@@ -1,12 +1,58 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
+from statistics import median
 from typing import List, Optional
 from urllib.parse import urljoin
 
 from bs4 import Tag
 
+_SKIP_PRICES = frozenset({'za darmo', 'zamienię', 'do negocjacji', ''})
+
 BASE_URL = "https://www.olx.pl"
+
+
+def parse_price(price_str: str) -> int | None:
+    s = price_str.strip().lower()
+    if not s or s in _SKIP_PRICES:
+        return None
+
+    if 'zł' in s:
+        s = s[:s.index('zł')].strip()
+
+    s = s.replace(' ', '').replace(',', '.')
+
+    try:
+        return round(float(s))
+    except ValueError:
+        return None
+
+
+def compute_stats(offers: list, pages_visited: int) -> dict:
+    prices = []
+    skipped = 0
+    for o in offers:
+        p = parse_price(o.price)
+        if p is not None:
+            prices.append(p)
+        else:
+            skipped += 1
+
+    stats = {
+        'total': len(offers),
+        'skipped': skipped,
+        'pages_visited': pages_visited,
+    }
+
+    if prices:
+        stats['average'] = round(sum(prices) / len(prices))
+        stats['median'] = round(median(prices))
+    else:
+        stats['average'] = None
+        stats['median'] = None
+
+    return stats
 
 
 @dataclass

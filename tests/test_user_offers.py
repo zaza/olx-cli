@@ -74,8 +74,8 @@ class TestMojolxVsUserSearch:
     def test_same_offers(self, authenticated_user):
         access_token, user_id = authenticated_user
 
-        api_offers = fetch_my_offers(access_token, max_pages=5)
-        html_offers = fetch_user_offers_html(user_id)
+        api_offers, _ = fetch_my_offers(access_token, max_pages=5)
+        html_offers, _ = fetch_user_offers_html(user_id)
 
         assert type(api_offers) == type(html_offers)
         assert len(api_offers) == len(html_offers), (
