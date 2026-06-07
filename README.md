@@ -5,6 +5,8 @@
 
 CLI tool for searching and scraping offers from [OLX.pl](https://www.olx.pl), the Polish classifieds marketplace. Built with Python, Click, requests, and BeautifulSoup.
 
+Python port of [olx-rss](https://github.com/zaza/olx-rss/).
+
 ## Authentication
 
 Create `credentials.txt` in the project root:
@@ -69,4 +71,6 @@ List available categories:
 olx-cli categories
 ```
 
-Python port of [olx-rss](https://github.com/zaza/olx-rss/).
+---
+
+Created with 🥒 Big Pickle in [OpenCode](https://opencode.ai)

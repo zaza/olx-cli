@@ -56,6 +56,9 @@ python3 -m olx_cli logout
 ## Run tests
 
 ```sh
+# Sequential:
+python3 -m pytest tests/ -v -n 0
+# Parallel (default, auto-detect cores):
 python3 -m pytest tests/ -v
 ```
 

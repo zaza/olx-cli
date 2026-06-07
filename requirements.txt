@@ -3,3 +3,4 @@ beautifulsoup4>=4.12
 lxml>=4.9
 click>=8.1
 pytest>=7.0
+pytest-xdist>=3.0
