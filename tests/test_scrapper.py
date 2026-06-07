@@ -18,15 +18,23 @@ class TestOlxScrapper:
         offers = scrapper.get_offers()
         assert len(offers) > 0
 
-    def test_pagination_limits(self):
-        import requests as req_lib
+    def test_pagination(self):
         url = build_url("rower", photo_only=True)
-        try:
-            one_page = OlxScrapper(url, max_pages=1).get_offers()
-            two_pages = OlxScrapper(url, max_pages=2).get_offers()
-            assert len(two_pages) >= len(one_page)
-        except req_lib.ReadTimeout:
-            pytest.skip("OLX read timeout during pagination test")
+        one_page = OlxScrapper(url, max_pages=1).get_offers()
+        two_pages = OlxScrapper(url, max_pages=2).get_offers()
+        assert len(two_pages) > len(one_page), (
+            f"2 pages ({len(two_pages)}) should return more than 1 page ({len(one_page)})"
+        )
+
+    def test_next_page_url(self):
+        import requests as req
+        from bs4 import BeautifulSoup
+        url = build_url("rower")
+        resp = req.get(url, timeout=15)
+        soup = BeautifulSoup(resp.text, "lxml")
+        next_url = OlxScrapper._next_page_url(soup)
+        assert next_url is not None, "pagination-forward link should exist for high-volume query"
+        assert "page=2" in next_url or "?page=2" in next_url, f"expected page=2 in next_url, got {next_url}"
 
     def test_all_fields_populated(self):
         url = build_url("rower", photo_only=True)

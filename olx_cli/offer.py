@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
+from typing import List, Optional
 from urllib.parse import urljoin
 
 from bs4 import Tag
@@ -16,6 +16,17 @@ class OlxOffer:
     url: str
     city: str
     photo: Optional[str] = None
+
+    @staticmethod
+    def _keywords(query: str) -> List[str]:
+        return query.lower().split()
+
+    def matches_keywords(self, query: str) -> bool:
+        kw = self._keywords(query)
+        if not kw:
+            return True
+        title_lower = self.title.lower()
+        return all(k in title_lower for k in kw)
 
     @classmethod
     def from_element(cls, element: Tag) -> OlxOffer:

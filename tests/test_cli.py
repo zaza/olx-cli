@@ -66,3 +66,23 @@ class TestCliOutput:
             pytest.skip("network-dependent, skip if offline")
         assert "Found" in result.output
         assert "Title" in result.output
+
+    def test_keyword_filtering_excludes_non_matching(self, runner):
+        result = runner.invoke(cli, [
+            "search", "fiat freemont",
+            "--location", "warszawa",
+            "--category", "motoryzacja/samochody/fiat",
+            "--json", "--max-pages", "1",
+        ])
+        if result.exit_code != 0:
+            pytest.skip("network-dependent, skip if offline")
+        data = json.loads(result.output)
+        assert "offers" in data
+        if data["offers"]:
+            kw = data["query"].split("'")[1] if "'" in data["query"] else ""
+            words = kw.lower().split()
+            for offer in data["offers"]:
+                title = offer["title"].lower()
+                assert all(w in title for w in words), (
+                    f"Offer '{offer['title']}' does not match keywords {words}"
+                )

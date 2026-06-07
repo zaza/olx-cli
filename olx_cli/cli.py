@@ -118,6 +118,7 @@ def search(query, photo_only, location, radius, min_price, max_price, category, 
 
     scrapper = OlxScrapper(url, max_pages=max_pages)
     offers = scrapper.get_offers()
+    offers = [o for o in offers if o.matches_keywords(query)]
 
     desc = describe(query, photo_only=photo_only, category=category)
     total = len(offers)

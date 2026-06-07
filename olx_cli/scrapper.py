@@ -76,18 +76,18 @@ class OlxScrapper:
 
     @staticmethod
     def _has_next_page(soup: BeautifulSoup) -> bool:
-        for link in soup.select("a[data-testid]"):
-            testid = link.get("data-testid", "")
-            if testid.startswith("pagination-link-"):
-                return True
-        return False
+        link = soup.select_one("a[data-testid=pagination-forward]")
+        if not link:
+            return False
+        href = link.get("href")
+        return bool(href) and href != "#"
 
     @staticmethod
     def _next_page_url(soup: BeautifulSoup) -> Optional[str]:
-        for link in soup.select("a[data-testid]"):
-            testid = link.get("data-testid", "")
-            if testid.startswith("pagination-link-"):
-                href = link.get("href")
-                if href and href != "#":
-                    return href
+        link = soup.select_one("a[data-testid=pagination-forward]")
+        if not link:
+            return None
+        href = link.get("href")
+        if href and href != "#":
+            return href
         return None
