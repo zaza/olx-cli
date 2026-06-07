@@ -3,7 +3,7 @@ import time
 import pytest
 
 from olx_cli.query import build_url
-from olx_cli.scrapper import OlxScrapper
+from olx_cli.scrapper import OlxScrapper, _HEADERS
 
 
 @pytest.fixture(autouse=True)
@@ -30,7 +30,7 @@ class TestOlxScrapper:
         import requests as req
         from bs4 import BeautifulSoup
         url = build_url("rower")
-        resp = req.get(url, timeout=15)
+        resp = req.get(url, headers=_HEADERS, timeout=15)
         soup = BeautifulSoup(resp.text, "lxml")
         next_url = OlxScrapper._next_page_url(soup)
         assert next_url is not None, "pagination-forward link should exist for high-volume query"
@@ -54,5 +54,6 @@ class TestOlxScrapper:
         url_photo = build_url("rower", photo_only=True)
         photo_offers = OlxScrapper(url_photo, max_pages=1).get_offers()
 
-        # with photo should return fewer or equal results
-        assert len(photo_offers) <= len(all_offers)
+        titles_all = {o.title for o in all_offers}
+        titles_photo = {o.title for o in photo_offers}
+        assert titles_all != titles_photo, "photo filter should change results"

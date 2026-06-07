@@ -12,6 +12,12 @@ from olx_cli.offer import BASE_URL, OlxOffer
 
 _OFFER_COUNT_RE = re.compile(r"Znaleźliśmy\s+(ponad\s+)?(\d+)\s+ogłosze(ń|nia)")
 _PAGE_TIMEOUT = 15
+_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+    ),
+}
 
 log = logging.getLogger(__name__)
 
@@ -28,7 +34,7 @@ class OlxScrapper:
 
         while True:
             log.debug("Fetching page %d: %s", page, url)
-            resp = requests.get(url, timeout=_PAGE_TIMEOUT)
+            resp = requests.get(url, headers=_HEADERS, timeout=_PAGE_TIMEOUT)
             resp.raise_for_status()
             soup = BeautifulSoup(resp.text, "lxml")
 
