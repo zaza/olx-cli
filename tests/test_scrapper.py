@@ -3,7 +3,7 @@ import time
 import pytest
 
 from olx_cli.query import build_url
-from olx_cli.scrapper import OlxScrapper, _HEADERS
+from olx_cli.scrapper import OlxScrapper, _HEADERS, _PAGE_TIMEOUT
 
 
 @pytest.fixture(autouse=True)
@@ -30,7 +30,7 @@ class TestOlxScrapper:
         import requests as req
         from bs4 import BeautifulSoup
         url = build_url("rower")
-        resp = req.get(url, headers=_HEADERS, timeout=15)
+        resp = req.get(url, headers=_HEADERS, timeout=_PAGE_TIMEOUT)
         soup = BeautifulSoup(resp.text, "lxml")
         next_url = OlxScrapper._next_page_url(soup)
         assert next_url is not None, "pagination-forward link should exist for high-volume query"

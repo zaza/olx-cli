@@ -11,7 +11,7 @@ from bs4 import BeautifulSoup
 from olx_cli.offer import BASE_URL, OlxOffer
 
 _OFFER_COUNT_RE = re.compile(r"Znaleźliśmy\s+(ponad\s+)?(\d+)\s+ogłosze(ń|nia)")
-_PAGE_TIMEOUT = 15
+_PAGE_TIMEOUT = 30
 _USER_AGENT = (
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
@@ -42,7 +42,7 @@ def _has_api_next(resp_data: dict) -> bool:
 def fetch_my_offers(
     access_token: str,
     max_pages: Optional[int] = 5,
-) -> List[OlxOffer]:
+) -> tuple[list[OlxOffer], int]:
     headers = {
         "Authorization": f"Bearer {access_token}",
         "User-Agent": _USER_AGENT,
@@ -76,7 +76,7 @@ def fetch_my_offers(
         offset += len(page_offers)
         page += 1
 
-    return offers
+    return offers, page
 
 
 def _parse_ssr_user_offers(html: str) -> tuple[list[OlxOffer], int, int] | None:
@@ -102,7 +102,7 @@ def _parse_ssr_user_offers(html: str) -> tuple[list[OlxOffer], int, int] | None:
 def fetch_user_offers_html(
     user_id: str,
     max_pages: Optional[int] = 5,
-) -> List[OlxOffer]:
+) -> tuple[list[OlxOffer], int]:
     offers: List[OlxOffer] = []
     total_pages = 0
 
@@ -117,23 +117,24 @@ def fetch_user_offers_html(
         result = _parse_ssr_user_offers(resp.text)
         if result is None:
             log.warning('__PRERENDERED_STATE__ not found on user page %d', page)
-            break
+            return offers, page - 1
 
         page_offers, total_elements, total_pages = result
         if not page_offers:
-            break
+            return offers, page
         offers.extend(page_offers)
 
         if page >= total_pages:
-            break
+            return offers, page
 
-    return offers
+    return offers, page
 
 
 class OlxScrapper:
     def __init__(self, start_url: str, max_pages: Optional[int] = 5) -> None:
         self._start_url = start_url
         self._max_pages = max_pages
+        self.pages_visited = 0
 
     def get_offers(self) -> List[OlxOffer]:
         url = self._start_url
@@ -174,6 +175,7 @@ class OlxScrapper:
                 break
             url = urljoin(BASE_URL, next_url)
             page += 1
+        self.pages_visited = page
 
         return offers
 
