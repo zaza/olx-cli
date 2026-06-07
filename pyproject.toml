@@ -1,2 +1,8 @@
+[project]
+name = "olx-cli"
+version = "0.1.0"
+description = "CLI tool for scraping OLX.pl classifieds"
+requires-python = ">=3.10"
+
 [tool.pytest.ini_options]
 addopts = "-n auto"

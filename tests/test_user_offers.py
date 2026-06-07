@@ -4,40 +4,39 @@ from pathlib import Path
 
 import pytest
 
-from olx_cli.scrapper import fetch_my_offers, fetch_user_offers_html
-
-
-def _read_credentials() -> tuple[str, str] | None:
-    creds_path = Path.cwd() / 'credentials.txt'
-    if not creds_path.exists():
-        return None
-    creds = {}
-    for line in creds_path.read_text().strip().splitlines():
-        line = line.strip()
-        if not line or line.startswith('#'):
-            continue
-        if '=' in line:
-            k, v = line.split('=', 1)
-            creds[k.strip()] = v.strip()
-    email = creds.get('username') or creds.get('email')
-    password = creds.get('password')
-    if email and password:
-        return email, password
-    return None
+from olx_cli.auth import read_credentials
+from olx_cli.scraper import fetch_my_offers, fetch_user_offers_html
 
 
 @pytest.fixture(scope='module')
-def authenticated_user():
+def authenticated_user(tmp_path_factory):
     """Login and return (access_token, user_id). Skips if no credentials.txt."""
-    from olx_cli.auth import login as auth_login, get_tokens
+    import json
+    import re
+
+    from olx_cli.auth import (
+        _tokens_path as _real_tokens_path,
+        get_tokens,
+        login as auth_login,
+        logout,
+    )
     from olx_cli.client import get_profile
 
-    creds = _read_credentials()
+    import olx_cli.auth as auth_module
+
+    creds_path = Path.cwd() / 'credentials.txt'
+    creds = read_credentials(creds_path)
     if creds is None:
         pytest.skip('credentials.txt not found')
 
+    fake_tokens = tmp_path_factory.mktemp('olx-auth') / 'tokens.json'
+    auth_module._tokens_path = lambda: fake_tokens
+
     email, password = creds
-    auth_login(email, password)
+    try:
+        auth_login(email, password)
+    except RuntimeError:
+        pytest.skip('login failed (WAF / network issue)')
 
     tokens = get_tokens()
     assert tokens is not None, 'token cache should be populated after login'
@@ -47,20 +46,17 @@ def authenticated_user():
     profile = get_profile()
     assert profile is not None, 'profile should be fetchable'
 
-    import json
-    import re
     m = re.search(r'/user/([^/]+)/', profile.get('user_ads_url', ''))
     assert m, f'user_ads_url not found in profile: {profile}'
     user_id = m.group(1)
     tokens['user_id'] = user_id
-    Path.home().joinpath('.cache', 'olx-cli', 'tokens.json').write_text(
-        json.dumps(tokens, ensure_ascii=False)
-    )
+    auth_module._tokens_path = lambda: fake_tokens
+    fake_tokens.write_text(json.dumps(tokens, ensure_ascii=False))
 
     yield access_token, user_id
 
-    from olx_cli.auth import logout
     logout()
+    auth_module._tokens_path = _real_tokens_path
 
 
 def _offer_key(o):

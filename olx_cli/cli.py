@@ -1,15 +1,25 @@
 from __future__ import annotations
 
 import json
+import re
 import sys
 from pathlib import Path
 
 import click
 
+from olx_cli.auth import (
+    _tokens_path,
+    get_tokens,
+    login as auth_login,
+    logout as auth_logout,
+    read_credentials,
+)
+from olx_cli.category import ensure_cached, get_cached, validate as validate_category
+from olx_cli.client import get_profile
 from olx_cli.offer import compute_stats
 from olx_cli.query import build_url, describe
 from olx_cli.radius import KNOWN_RADII
-from olx_cli.scrapper import OlxScrapper, fetch_my_offers, fetch_user_offers_html
+from olx_cli.scraper import OlxScraper, fetch_my_offers, fetch_user_offers_html
 
 
 def _print_table(offers, description, total, url, json_output, stats=None):
@@ -75,14 +85,11 @@ def cli(ctx):
 
 @cli.command()
 def login():
-    from olx_cli.auth import (login as auth_login, get_tokens,
-        _tokens_path)
-    from olx_cli.client import get_profile
-
     creds_path = Path.cwd() / "credentials.txt"
-    if not creds_path.exists():
+    creds = read_credentials(creds_path)
+    if creds is None:
         click.echo(
-            f"Error: {creds_path} not found.\n\n"
+            f"Error: {creds_path} not found or malformed.\n\n"
             "Create a credentials.txt file with:\n"
             "username=your@email.com\n"
             "password=your_password",
@@ -90,24 +97,7 @@ def login():
         )
         raise click.Abort
 
-    creds = {}
-    for line in creds_path.read_text().strip().splitlines():
-        line = line.strip()
-        if not line or line.startswith("#"):
-            continue
-        if "=" in line:
-            k, v = line.split("=", 1)
-            creds[k.strip()] = v.strip()
-
-    email = creds.get("username") or creds.get("email")
-    password = creds.get("password")
-
-    if not email or not password:
-        click.echo(
-            "Error: credentials.txt must contain 'username' and 'password' fields.",
-            err=True,
-        )
-        raise click.Abort
+    email, password = creds
 
     try:
         auth_login(email, password)
@@ -118,7 +108,6 @@ def login():
     profile = get_profile()
     user_id = None
     if profile:
-        import re
         m = re.search(r'/user/([^/]+)/', profile.get('user_ads_url', ''))
         if m:
             user_id = m.group(1)
@@ -135,8 +124,6 @@ def login():
 
 @cli.command()
 def logout():
-    from olx_cli.auth import logout as auth_logout
-
     auth_logout()
     click.echo("Logged out.")
 
@@ -144,17 +131,13 @@ def logout():
 @cli.command()
 @click.option("--json", "json_output", is_flag=True, help="Output as JSON")
 def me(json_output):
-    from olx_cli.client import get_profile
-
     profile = get_profile()
     if profile is None:
         click.echo("Not logged in. Run 'olx-cli login' first.", err=True)
         raise click.Abort
 
     if json_output:
-        import json as _json
-
-        _json.dump(profile, sys.stdout, indent=2, ensure_ascii=False)
+        json.dump(profile, sys.stdout, indent=2, ensure_ascii=False)
         sys.stdout.write("\n")
         return
 
@@ -170,8 +153,6 @@ def me(json_output):
 def _validate_category(category: str | None) -> str | None:
     if category is None:
         return None
-    from olx_cli.category import validate as validate_category
-
     try:
         validate_category(category)
     except ValueError as e:
@@ -219,8 +200,6 @@ def search(query, photo_only, location, radius, min_price, max_price, category, 
             raise click.Abort
 
         if user_id == 'me':
-            from olx_cli.auth import get_tokens
-
             tokens = get_tokens()
             if not tokens:
                 click.echo("Not logged in. Run 'olx-cli login' first.", err=True)
@@ -251,7 +230,7 @@ def search(query, photo_only, location, radius, min_price, max_price, category, 
             category=category,
         )
 
-        scrapper = OlxScrapper(url, max_pages=max_pages)
+        scrapper = OlxScraper(url, max_pages=max_pages)
         offers = scrapper.get_offers()
         offers = [o for o in offers if o.matches_keywords(query)]
 
@@ -265,8 +244,6 @@ def search(query, photo_only, location, radius, min_price, max_price, category, 
 
 @cli.command()
 def categories():
-    from olx_cli.category import get_cached, ensure_cached
-
     cats = ensure_cached()
     if not cats:
         click.echo("Failed to fetch categories. Check your internet connection.", err=True)

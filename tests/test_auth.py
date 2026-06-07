@@ -1,8 +1,19 @@
 from __future__ import annotations
 
-from unittest.mock import patch
+from pathlib import Path
+
+import pytest
 
 from olx_cli.auth import decode_jwt
+
+
+@pytest.fixture
+def fake_tokens_path(monkeypatch, tmp_path):
+    from olx_cli.auth import _tokens_path
+
+    p = tmp_path / 'tokens.json'
+    monkeypatch.setattr('olx_cli.auth._tokens_path', lambda: p)
+    return p
 
 
 class TestDecodeJwt:
@@ -33,28 +44,24 @@ class TestDecodeJwt:
 
 
 class TestGetTokensNoCache:
-    def test_returns_none_on_bad_json(self):
-        from pathlib import Path
+    def test_returns_none_on_bad_json(self, fake_tokens_path):
         from olx_cli.auth import get_tokens
 
-        p = Path.home() / ".cache" / "olx-cli" / "tokens.json"
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text("not-json")
+        fake_tokens_path.parent.mkdir(parents=True, exist_ok=True)
+        fake_tokens_path.write_text("not-json")
         result = get_tokens()
-        p.unlink(missing_ok=True)
         assert result is None
 
 
 class TestLogout:
-    def test_removes_token_file(self, tmp_path):
-        from olx_cli.auth import logout, _tokens_path
+    def test_removes_token_file(self, fake_tokens_path):
+        from olx_cli.auth import logout
 
-        p = _tokens_path()
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text("{}")
-        assert p.exists()
+        fake_tokens_path.parent.mkdir(parents=True, exist_ok=True)
+        fake_tokens_path.write_text("{}")
+        assert fake_tokens_path.exists()
         logout()
-        assert not p.exists()
+        assert not fake_tokens_path.exists()
 
     def test_no_error_when_no_file(self):
         from olx_cli.auth import logout

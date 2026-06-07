@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 import re
 from typing import List, Optional
@@ -84,8 +85,6 @@ def _parse_ssr_user_offers(html: str) -> tuple[list[OlxOffer], int, int] | None:
 
     Returns (offers, total_elements, total_pages) or None if SSR data is missing.
     """
-    import json
-
     m = _PRERENDERED_STATE_RE.search(html)
     if not m:
         return None
@@ -104,9 +103,13 @@ def fetch_user_offers_html(
     max_pages: Optional[int] = 5,
 ) -> tuple[list[OlxOffer], int]:
     offers: List[OlxOffer] = []
-    total_pages = 0
+    page = 0
 
-    for page in range(1, max_pages + 1):
+    while True:
+        page += 1
+        if max_pages is not None and page > max_pages:
+            break
+
         url = f'https://www.olx.pl/oferty/uzytkownik/{user_id}/'
         if page > 1:
             url += f'?page={page}'
@@ -124,13 +127,13 @@ def fetch_user_offers_html(
             return offers, page
         offers.extend(page_offers)
 
-        if page >= total_pages:
+        if total_pages and page >= total_pages:
             return offers, page
 
     return offers, page
 
 
-class OlxScrapper:
+class OlxScraper:
     def __init__(self, start_url: str, max_pages: Optional[int] = 5) -> None:
         self._start_url = start_url
         self._max_pages = max_pages

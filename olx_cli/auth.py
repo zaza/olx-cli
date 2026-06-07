@@ -1,15 +1,16 @@
 from __future__ import annotations
 
+import base64
 import json
 import logging
-import os
 import time
 from pathlib import Path
 from typing import Optional
 
 import requests
 
-from olx_cli.scrapper import _USER_AGENT
+from olx_cli.cache import _cache_dir
+from olx_cli.scraper import _USER_AGENT
 
 log = logging.getLogger(__name__)
 
@@ -32,11 +33,6 @@ _HEADERS = {
 }
 
 
-def _cache_dir() -> Path:
-    base = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache"))
-    return base / "olx-cli"
-
-
 def _tokens_path() -> Path:
     return _cache_dir() / _TOKENS_FILENAME
 
@@ -47,8 +43,6 @@ def _now() -> int:
 
 def decode_jwt(token: str) -> dict:
     """Decode JWT payload (no signature verification)."""
-    import base64
-
     parts = token.split(".")
     padded = parts[1] + "=" * (4 - len(parts[1]) % 4)
     return json.loads(base64.urlsafe_b64decode(padded))
@@ -124,6 +118,26 @@ def get_access_token() -> Optional[str]:
     tokens = get_tokens()
     if tokens:
         return tokens["AccessToken"]
+    return None
+
+
+def read_credentials(path: Path) -> tuple[str, str] | None:
+    try:
+        text = path.read_text()
+    except FileNotFoundError:
+        return None
+    creds = {}
+    for line in text.strip().splitlines():
+        line = line.strip()
+        if not line or line.startswith('#'):
+            continue
+        if '=' in line:
+            k, v = line.split('=', 1)
+            creds[k.strip()] = v.strip()
+    email = creds.get('username') or creds.get('email')
+    password = creds.get('password')
+    if email and password:
+        return email, password
     return None
 
 

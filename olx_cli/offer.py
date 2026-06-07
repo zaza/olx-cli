@@ -39,20 +39,20 @@ def compute_stats(offers: list, pages_visited: int) -> dict:
         else:
             skipped += 1
 
-    stats = {
+    avg = None
+    med = None
+
+    if prices:
+        avg = round(sum(prices) / len(prices))
+        med = round(median(prices))
+
+    return {
         'total': len(offers),
         'skipped': skipped,
         'pages_visited': pages_visited,
+        'average': avg,
+        'median': med,
     }
-
-    if prices:
-        stats['average'] = round(sum(prices) / len(prices))
-        stats['median'] = round(median(prices))
-    else:
-        stats['average'] = None
-        stats['median'] = None
-
-    return stats
 
 
 @dataclass

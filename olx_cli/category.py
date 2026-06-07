@@ -2,22 +2,18 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import time
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import List, Optional
 from urllib.request import urlopen
 
+from olx_cli.cache import _cache_dir
+
 log = logging.getLogger(__name__)
 
 SITEMAP_URL = "https://www.olx.pl/sitemap-categories.xml"
 CACHE_TTL = 86400  # 24 hours
-
-
-def _cache_dir() -> Path:
-    base = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache"))
-    return base / "olx-cli"
 
 
 def _cache_path() -> Path:
@@ -43,7 +39,7 @@ def _fetch_categories() -> List[str]:
     ns = {"s": "http://www.sitemaps.org/schemas/sitemap/0.9"}
     categories: set[str] = set()
     for loc in root.findall(".//s:loc", ns):
-        path = loc.text.replace("https://www.olx.pl/", "").rstrip("/")
+        path = (loc.text or '').replace("https://www.olx.pl/", "").rstrip("/")
         if not path:
             continue
         parts = path.split("/")

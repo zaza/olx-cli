@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from typing import Optional
 
 import requests
 
-from olx_cli.auth import get_access_token
-from olx_cli.scrapper import _PAGE_TIMEOUT, _USER_AGENT
+from olx_cli.auth import get_access_token, logout
+from olx_cli.scraper import _PAGE_TIMEOUT, _USER_AGENT
 
 log = logging.getLogger(__name__)
 
@@ -31,8 +31,6 @@ def get(endpoint: str) -> Optional[dict]:
     )
     if resp.status_code == 401:
         log.warning("Token expired, clearing cache. Run 'olx-cli login' again.")
-        from olx_cli.auth import logout
-
         logout()
         return None
 
@@ -50,8 +48,4 @@ def get_profile() -> Optional[dict]:
     return data.get("data")
 
 
-def get_offers() -> Optional[list[dict]]:
-    data = get("/users/me/offers/")
-    if data is None:
-        return None
-    return data.get("data", [])
+
