@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sys
+from pathlib import Path
 
 import click
 
@@ -57,8 +58,85 @@ def _print_table(offers, description, total, url, json_output):
 
 
 @click.group()
-def cli():
+@click.pass_context
+def cli(ctx):
     pass
+
+
+@cli.command()
+def login():
+    from olx_cli.auth import login as auth_login
+
+    creds_path = Path.cwd() / "credentials.txt"
+    if not creds_path.exists():
+        click.echo(
+            f"Error: {creds_path} not found.\n\n"
+            "Create a credentials.txt file with:\n"
+            "username=your@email.com\n"
+            "password=your_password",
+            err=True,
+        )
+        raise click.Abort
+
+    creds = {}
+    for line in creds_path.read_text().strip().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if "=" in line:
+            k, v = line.split("=", 1)
+            creds[k.strip()] = v.strip()
+
+    email = creds.get("username") or creds.get("email")
+    password = creds.get("password")
+
+    if not email or not password:
+        click.echo(
+            "Error: credentials.txt must contain 'username' and 'password' fields.",
+            err=True,
+        )
+        raise click.Abort
+
+    try:
+        auth_login(email, password)
+        click.echo("Logged in successfully.")
+    except RuntimeError as e:
+        click.echo(f"Error: {e}", err=True)
+        raise click.Abort from e
+
+
+@cli.command()
+def logout():
+    from olx_cli.auth import logout as auth_logout
+
+    auth_logout()
+    click.echo("Logged out.")
+
+
+@cli.command()
+@click.option("--json", "json_output", is_flag=True, help="Output as JSON")
+def me(json_output):
+    from olx_cli.client import get_profile
+
+    profile = get_profile()
+    if profile is None:
+        click.echo("Not logged in. Run 'olx-cli login' first.", err=True)
+        raise click.Abort
+
+    if json_output:
+        import json as _json
+
+        _json.dump(profile, sys.stdout, indent=2, ensure_ascii=False)
+        sys.stdout.write("\n")
+        return
+
+    click.echo(f"Name:     {profile.get('name', 'N/A')}")
+    click.echo(f"Email:    {profile.get('email', 'N/A')}")
+    click.echo(f"Phone:    {profile.get('phone', 'N/A')}")
+    click.echo(f"City:     {profile.get('location', {}).get('city', {}).get('name', 'N/A')}")
+    click.echo(f"Since:    {profile.get('created', 'N/A')}")
+    click.echo(f"Account:  {'Business' if profile.get('is_business') else 'Personal'}")
+    click.echo(f"Profile:  {profile.get('user_ads_url', 'N/A')}")
 
 
 def _validate_category(category: str | None) -> str | None:

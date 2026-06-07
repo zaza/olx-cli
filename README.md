@@ -16,9 +16,35 @@ CLI tool for searching and scraping offers from [OLX.pl](https://www.olx.pl), th
   --max-pages 2
 ```
 
-Python port of [olx-rss](https://github.com/zaza/olx-rss/).
-
 List available categories:
 ```sh
 ./olx-cli categories
+```
+
+## Authentication
+
+Create `credentials.txt` in the project root:
+
+```
+username=your@email.com
+password=your_password
+```
+
+Then login:
+
+```sh
+olx-cli login
+```
+
+View your profile:
+
+```sh
+olx-cli me
+olx-cli me --json   # agent-friendly
+```
+
+Logout:
+
+```sh
+olx-cli logout
 ```

@@ -33,6 +33,19 @@ List available categories:
 python3 -m olx_cli categories
 ```
 
+## Authentication
+
+```sh
+# Login (reads credentials.txt from CWD)
+python3 -m olx_cli login
+
+# Show profile (prefer --json for agent usage):
+python3 -m olx_cli me --json
+
+# Logout
+python3 -m olx_cli logout
+```
+
 ## Run tests
 
 ```sh
