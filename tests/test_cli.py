@@ -24,6 +24,11 @@ class TestCliHelp:
                     "--max-price", "--category", "--max-pages", "--no-max-pages", "--json"]:
             assert opt in result.output
 
+    def test_login_help_contains_json(self, runner):
+        result = runner.invoke(cli, ["login", "--help"])
+        assert result.exit_code == 0
+        assert "--json" in result.output
+
     def test_categories_help(self, runner):
         result = runner.invoke(cli, ["categories", "--help"])
         assert result.exit_code == 0

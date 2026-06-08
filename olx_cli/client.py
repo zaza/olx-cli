@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from typing import Optional
 
 import requests
@@ -11,6 +12,13 @@ from olx_cli.scraper import _PAGE_TIMEOUT, _USER_AGENT
 log = logging.getLogger(__name__)
 
 _API_BASE = "https://www.olx.pl/api/v1"
+
+
+def get_user_id_from_profile(profile: dict) -> Optional[str]:
+    """Extract user ID from the user_ads_url in the profile data."""
+    url = profile.get('user_ads_url', '')
+    m = re.search(r'/user/([^/]+)/', url)
+    return m.group(1) if m else None
 
 
 def _headers(token: str) -> dict:
@@ -46,6 +54,3 @@ def get_profile() -> Optional[dict]:
     if data is None:
         return None
     return data.get("data")
-
-
-

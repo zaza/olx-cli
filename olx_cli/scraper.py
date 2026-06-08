@@ -13,17 +13,20 @@ from olx_cli.offer import BASE_URL, OlxOffer
 
 _OFFER_COUNT_RE = re.compile(r"Znaleźliśmy\s+(ponad\s+)?(\d+)\s+ogłosze(ń|nia)")
 _PAGE_TIMEOUT = 30
+
 _USER_AGENT = (
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+    "(KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36"
 )
 
-_HEADERS = {
+_DEFAULT_HEADERS = {
     "User-Agent": _USER_AGENT,
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "pl-PL,pl;q=0.9,en-US;q=0.8,en;q=0.7",
 }
 
 _PRERENDERED_STATE_RE = re.compile(
-    r'window\.__PRERENDERED_STATE__\s*=\s*"(.+?)"\s*;'
+    r'window\.__PRENDERED_STATE__\s*=\s*"(.+?)"\s*;'
 )
 
 log = logging.getLogger(__name__)
@@ -114,7 +117,7 @@ def fetch_user_offers_html(
         if page > 1:
             url += f'?page={page}'
 
-        resp = requests.get(url, headers=_HEADERS, timeout=_PAGE_TIMEOUT)
+        resp = requests.get(url, headers=_DEFAULT_HEADERS, timeout=_PAGE_TIMEOUT)
         resp.raise_for_status()
 
         result = _parse_ssr_user_offers(resp.text)
@@ -146,7 +149,7 @@ class OlxScraper:
 
         while True:
             log.debug("Fetching page %d: %s", page, url)
-            resp = requests.get(url, headers=_HEADERS, timeout=_PAGE_TIMEOUT)
+            resp = requests.get(url, headers=_DEFAULT_HEADERS, timeout=_PAGE_TIMEOUT)
             resp.raise_for_status()
             soup = BeautifulSoup(resp.text, "lxml")
 

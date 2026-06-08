@@ -10,7 +10,7 @@ from typing import Optional
 import requests
 
 from olx_cli.cache import _cache_dir
-from olx_cli.scraper import _USER_AGENT
+from olx_cli.scraper import _USER_AGENT, _DEFAULT_HEADERS
 
 log = logging.getLogger(__name__)
 
@@ -18,19 +18,34 @@ COGNITO_REGION = "eu-west-1"
 COGNITO_URL = f"https://cognito-idp.{COGNITO_REGION}.amazonaws.com/"
 COGNITO_CLIENT_ID = "15gc33db15l8fi8fttfqjtoifn"
 
+log = logging.getLogger(__name__)
+
 _TOKENS_FILENAME = "tokens.json"
-_HEADERS = {
-    "Content-Type": "application/x-amz-json-1.1",
-    "X-Amz-Target": "AWSCognitoIdentityProviderService.InitiateAuth",
-    "User-Agent": _USER_AGENT,
-    "Origin": "https://www.olx.pl",
-    "Referer": "https://www.olx.pl/",
-    "Accept": "*/*",
-    "Accept-Language": "pl-PL,pl;q=0.9,en-US;q=0.8,en;q=0.7",
-    "Sec-Fetch-Dest": "empty",
-    "Sec-Fetch-Mode": "cors",
-    "Sec-Fetch-Site": "cross-site",
-}
+
+def _session() -> requests.Session:
+    s = requests.Session()
+    s.headers.update(_DEFAULT_HEADERS)
+    # Visit front page to prime cookies / WAF
+    s.get("https://www.olx.pl/", timeout=15)
+    return s
+
+
+def _cognito_headers() -> dict:
+    return {
+        "Content-Type": "application/x-amz-json-1.1",
+        "X-Amz-Target": "AWSCognitoIdentityProviderService.InitiateAuth",
+        "User-Agent": _USER_AGENT,
+        "Origin": "https://www.olx.pl",
+        "Referer": "https://www.olx.pl/",
+        "Accept": "*/*",
+        "Accept-Language": _DEFAULT_HEADERS["Accept-Language"],
+        "Sec-Fetch-Dest": "empty",
+        "Sec-Fetch-Mode": "cors",
+        "Sec-Fetch-Site": "cross-site",
+        "Sec-Ch-Ua": '"Not/A)Brand";v="99", "Google Chrome";v="135", "Chromium";v="135"',
+        "Sec-Ch-Ua-Mobile": "?0",
+        "Sec-Ch-Ua-Platform": '"Linux"',
+    }
 
 
 def _tokens_path() -> Path:
@@ -44,8 +59,17 @@ def _now() -> int:
 def decode_jwt(token: str) -> dict:
     """Decode JWT payload (no signature verification)."""
     parts = token.split(".")
-    padded = parts[1] + "=" * (4 - len(parts[1]) % 4)
-    return json.loads(base64.urlsafe_b64decode(padded))
+    return json.loads(base64.urlsafe_b64decode(parts[1] + "==="))
+
+
+def _cognito_post(body: dict) -> requests.Response:
+    sess = _session()
+    return sess.post(COGNITO_URL, json=body, headers=_cognito_headers(), timeout=15)
+
+
+def _save_tokens(tokens: dict) -> None:
+    _cache_dir().mkdir(parents=True, exist_ok=True)
+    _tokens_path().write_text(json.dumps(tokens, ensure_ascii=False))
 
 
 def login(email: str, password: str) -> dict:
@@ -57,9 +81,7 @@ def login(email: str, password: str) -> dict:
             "PASSWORD": password,
         },
     }
-    resp = requests.post(
-        COGNITO_URL, json=body, headers=_HEADERS, timeout=15
-    )
+    resp = _cognito_post(body)
     if resp.status_code != 200:
         raise RuntimeError(
             f"Login failed (HTTP {resp.status_code}): {resp.text[:200]}"
@@ -67,8 +89,7 @@ def login(email: str, password: str) -> dict:
     result = resp.json()["AuthenticationResult"]
     result["expires_at"] = _now() + result["ExpiresIn"]
 
-    _cache_dir().mkdir(parents=True, exist_ok=True)
-    _tokens_path().write_text(json.dumps(result, ensure_ascii=False))
+    _save_tokens(result)
 
     return result
 
@@ -95,9 +116,7 @@ def _refresh(refresh_token: Optional[str]) -> Optional[dict]:
         "AuthParameters": {"REFRESH_TOKEN": refresh_token},
     }
     try:
-        resp = requests.post(
-            COGNITO_URL, json=body, headers=_HEADERS, timeout=15
-        )
+        resp = _cognito_post(body)
         if resp.status_code != 200:
             log.warning("Token refresh failed: %s", resp.text[:200])
             return None
@@ -105,8 +124,7 @@ def _refresh(refresh_token: Optional[str]) -> Optional[dict]:
         result["expires_at"] = _now() + result["ExpiresIn"]
         result["RefreshToken"] = refresh_token
 
-        _cache_dir().mkdir(parents=True, exist_ok=True)
-        _tokens_path().write_text(json.dumps(result, ensure_ascii=False))
+        _save_tokens(result)
 
         return result
     except requests.RequestException as e:
@@ -126,14 +144,7 @@ def read_credentials(path: Path) -> tuple[str, str] | None:
         text = path.read_text()
     except FileNotFoundError:
         return None
-    creds = {}
-    for line in text.strip().splitlines():
-        line = line.strip()
-        if not line or line.startswith('#'):
-            continue
-        if '=' in line:
-            k, v = line.split('=', 1)
-            creds[k.strip()] = v.strip()
+    creds = {k.strip(): v.strip() for line in text.splitlines() if '=' in line and not line.startswith('#') for k, v in [line.split('=', 1)]}
     email = creds.get('username') or creds.get('email')
     password = creds.get('password')
     if email and password:

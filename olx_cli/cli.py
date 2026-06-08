@@ -15,12 +15,17 @@ from olx_cli.auth import (
     read_credentials,
 )
 from olx_cli.category import ensure_cached, get_cached, validate as validate_category
-from olx_cli.client import get_profile
+from olx_cli.client import get_profile, get_user_id_from_profile
 from olx_cli.offer import compute_stats
+from olx_cli.offer_submit import find_offer_files, read_offer, submit_offer, validate_offer
 from olx_cli.query import build_url, describe
 from olx_cli.radius import KNOWN_RADII
 from olx_cli.scraper import OlxScraper, fetch_my_offers, fetch_user_offers_html
 
+
+def render_json(data):
+    json.dump(data, sys.stdout, indent=2, ensure_ascii=False)
+    sys.stdout.write("\n")
 
 def _print_table(offers, description, total, url, json_output, stats=None):
     if json_output:
@@ -42,8 +47,7 @@ def _print_table(offers, description, total, url, json_output, stats=None):
         }
         if stats:
             data['stats'] = stats
-        json.dump(data, sys.stdout, indent=2, ensure_ascii=False)
-        sys.stdout.write("\n")
+        render_json(data)
         return
 
     click.echo(f"Found {total} offers for {description}")
@@ -88,41 +92,81 @@ def cli(ctx):
     pass
 
 
+def _login_with_browser(creds, json_output=False):
+    from olx_cli.browser_auth import login_with_browser as browser_login, read_credentials as browser_creds
+    from olx_cli.client import get_profile, get_user_id_from_profile
+
+    if creds is None:
+        creds = browser_creds()
+
+    email = password = None
+    if creds:
+        email, password = creds
+
+    try:
+        tokens = browser_login(headless=False, email=email, password=password)
+    except RuntimeError as e:
+        click.echo(f"Error: {e}\n\nTry again in a few minutes.", err=True)
+        raise click.Abort from e
+
+    user_id = None
+    if tokens.get('user_id'):
+        user_id = tokens['user_id']
+    else:
+        profile = get_profile()
+        if profile:
+            user_id = get_user_id_from_profile(profile)
+            if user_id:
+                tokens['user_id'] = user_id
+                from olx_cli.auth import _tokens_path
+                import json
+                _tokens_path().write_text(json.dumps(tokens, ensure_ascii=False))
+
+    if json_output:
+        render_json(tokens)
+        return
+
+    click.echo("Logged in successfully.")
+
+
 @cli.command()
-def login():
+@click.option("--browser", is_flag=True, help="Force browser-based login (bypasses WAF)")
+@click.option("--json", "json_output", is_flag=True, help="Output tokens as JSON")
+def login(browser, json_output):
     creds_path = Path.cwd() / "credentials.txt"
     creds = read_credentials(creds_path)
-    if creds is None:
-        click.echo(
-            f"Error: {creds_path} not found or malformed.\n\n"
-            "Create a credentials.txt file with:\n"
-            "username=your@email.com\n"
-            "password=your_password",
-            err=True,
-        )
-        raise click.Abort
+
+    if browser or creds is None:
+        if not browser and creds is None and not creds_path.exists():
+            click.echo(
+                f"Error: {creds_path} not found or malformed.\n\n"
+                "Create a credentials.txt file with:\n"
+                "username=your@email.com\n"
+                "password=your_password",
+                err=True,
+            )
+            raise click.Abort
+        return _login_with_browser(creds, json_output=json_output)
 
     email, password = creds
 
     try:
         auth_login(email, password)
-    except RuntimeError as e:
-        click.echo(f"Error: {e}", err=True)
-        raise click.Abort from e
+    except RuntimeError:
+        click.echo("Cognito login blocked (likely WAF). Falling back to browser login...", err=True)
+        return _login_with_browser(creds, json_output=json_output)
 
     profile = get_profile()
-    user_id = None
-    if profile:
-        m = re.search(r'/user/([^/]+)/', profile.get('user_ads_url', ''))
-        if m:
-            user_id = m.group(1)
-            tokens = get_tokens()
-            if tokens:
-                tokens['user_id'] = user_id
-                _tokens_path().write_text(json.dumps(tokens, ensure_ascii=False))
-
+    user_id = get_user_id_from_profile(profile) if profile else None
     if user_id:
-        click.echo(user_id)
+        tokens = get_tokens()
+        if tokens:
+            tokens['user_id'] = user_id
+            _tokens_path().write_text(json.dumps(tokens, ensure_ascii=False))
+
+    if json_output:
+        tokens = get_tokens()
+        render_json(tokens)
     else:
         click.echo("Logged in successfully.")
 
@@ -142,8 +186,7 @@ def me(json_output):
         raise click.Abort
 
     if json_output:
-        json.dump(profile, sys.stdout, indent=2, ensure_ascii=False)
-        sys.stdout.write("\n")
+        render_json(profile)
         return
 
     click.echo(f"Name:     {profile.get('name', 'N/A')}")
@@ -255,6 +298,72 @@ def categories():
         raise click.Abort
     for c in cats:
         click.echo(c)
+
+
+@cli.command()
+@click.argument('path', type=click.Path(exists=True))
+@click.option('--dry-run', is_flag=True, help='Parse and validate only, do not submit')
+@click.option('--json', 'json_output', is_flag=True, help='Output result as JSON')
+def add(path, dry_run, json_output):
+    """Add offer(s) from a file or folder.
+
+    PATH can be a single offer.txt file or a folder containing subfolders
+    each with their own offer.txt.
+
+    File format:
+
+        title=Tytuł ogłoszenia
+
+        price=1299
+
+        category=rowery
+
+        city=Kraków
+
+        ---
+
+        Opis ogłoszenia (może być wieloliniowy).
+    """
+    files = find_offer_files(path)
+
+    if not files:
+        click.echo('Error: no offer.txt files found.', err=True)
+        raise click.Abort
+
+    results = []
+    has_errors = False
+
+    for f in files:
+        data = read_offer(f)
+        errors = validate_offer(data)
+
+        if errors:
+            click.echo(f'Error in {f}:', err=True)
+            for e in errors:
+                click.echo(f'  - {e}', err=True)
+            has_errors = True
+            if not dry_run:
+                results.append({'file': f, 'status': 'validation_error', 'errors': errors})
+            continue
+
+        if dry_run:
+            click.echo(f'{f}: valid')
+            results.append({'file': f, 'status': 'valid', 'data': data})
+            continue
+
+        try:
+            resp = submit_offer(data)
+            results.append({'file': f, 'status': 'submitted', 'response': resp})
+        except (RuntimeError, ValueError) as e:
+            click.echo(f'Error submitting {f}: {e}', err=True)
+            has_errors = True
+            results.append({'file': f, 'status': 'error', 'error': str(e)})
+
+    if json_output:
+        render_json(results)
+
+    if has_errors:
+        raise click.Abort
 
 
 def main():
