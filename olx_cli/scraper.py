@@ -162,21 +162,21 @@ class OlxScraper:
                 log.info("Found %d total offers", total)
                 if total == 0:
                     return []
-                if not self._has_next_page(soup) and page_offers:
+                if not self._has_next_page(soup, page) and page_offers:
                     count = min(total, len(page_offers))
                     page_offers = page_offers[:count]
 
             for el in page_offers:
                 offers.append(OlxOffer.from_element(el))
 
-            if not self._has_next_page(soup):
+            if not self._has_next_page(soup, page):
                 break
 
             if self._max_pages is not None and page >= self._max_pages:
                 log.info("Reached max pages (%d)", self._max_pages)
                 break
 
-            next_url = self._next_page_url(soup)
+            next_url = self._next_page_url(soup, page)
             if not next_url:
                 break
             url = urljoin(BASE_URL, next_url)
@@ -197,19 +197,39 @@ class OlxScraper:
         return 0
 
     @staticmethod
-    def _has_next_page(soup: BeautifulSoup) -> bool:
+    def _has_next_page(soup: BeautifulSoup, page: int = 1) -> bool:
         link = soup.select_one("a[data-testid=pagination-forward]")
-        if not link:
-            return False
-        href = link.get("href")
-        return bool(href) and href != "#"
+        if link:
+            href = link.get("href")
+            if href and href != "#":
+                return True
+        return OlxScraper._max_page_num(soup) > page
 
     @staticmethod
-    def _next_page_url(soup: BeautifulSoup) -> Optional[str]:
+    def _next_page_url(soup: BeautifulSoup, page: int = 1) -> Optional[str]:
         link = soup.select_one("a[data-testid=pagination-forward]")
-        if not link:
-            return None
-        href = link.get("href")
-        if href and href != "#":
-            return href
+        if link:
+            href = link.get("href")
+            if href and href != "#":
+                return href
+        wrapper = soup.select_one("div[data-testid=pagination-wrapper]")
+        if wrapper:
+            for a in wrapper.find_all("a", href=True):
+                m = re.search(r'[/?]page[=/](\d+)', a['href'])
+                if m and int(m.group(1)) == page + 1:
+                    return a['href']
         return None
+
+    @staticmethod
+    def _max_page_num(soup: BeautifulSoup) -> int:
+        wrapper = soup.select_one("div[data-testid=pagination-wrapper]")
+        if not wrapper:
+            return 1
+        max_p = 1
+        for a in wrapper.find_all("a", href=True):
+            m = re.search(r'[/?]page[=/](\d+)', a['href'])
+            if m:
+                p = int(m.group(1))
+                if p > max_p:
+                    max_p = p
+        return max_p

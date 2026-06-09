@@ -27,7 +27,7 @@ def render_json(data):
     json.dump(data, sys.stdout, indent=2, ensure_ascii=False)
     sys.stdout.write("\n")
 
-def _print_table(offers, description, total, url, json_output, stats=None):
+def _print_table(offers, description, total, url, json_output, stats=None, max_pages=None):
     if json_output:
         data = {
             "query": description,
@@ -50,14 +50,26 @@ def _print_table(offers, description, total, url, json_output, stats=None):
         render_json(data)
         return
 
-    click.echo(f"Found {total} offers for {description}")
+    click.echo(f"Search: {description}")
+    click.echo(f"URL:    {url}")
     if stats:
-        click.echo(
-            f"  Pages: {stats['pages_visited']}  "
-            f"Avg price: {stats['average'] or 'N/A'} zł  "
-            f"Median: {stats['median'] or 'N/A'} zł  "
-            f"(skipped {stats['skipped']} non-monetary)"
-        )
+        pages = stats['pages_visited']
+        pages_label = f"{pages} page{'s' * (pages != 1)}"
+        if max_pages is not None and pages == max_pages:
+            pages_label += ' (max)'
+        skipped = stats['skipped']
+        avg = stats['average']
+        med = stats['median']
+        parts = [f"Found:  {total} offers"]
+        if skipped:
+            parts.append(f"(skipped {skipped} non-monetary)")
+        parts.append(f"across {pages_label}")
+        click.echo(' '.join(parts))
+        if avg is not None and med is not None:
+            click.echo(f"Price (avg/median): {avg} zł / {med} zł")
+    else:
+        click.echo(f"Found:  {total} offers")
+
     click.echo()
 
     if not offers:
@@ -82,8 +94,6 @@ def _print_table(offers, description, total, url, json_output, stats=None):
         click.echo(
             f"{o.title:<{title_w}}  {get_display_price(o):>{price_w}}  {o.city:<{city_w}}"
         )
-    click.echo()
-    click.echo(f"URL: {url}")
 
 
 @click.group()
@@ -287,7 +297,7 @@ def search(query, photo_only, location, radius, min_price, max_price, category, 
 
     total = len(offers)
 
-    _print_table(offers, desc, total, url, json_output, stats=stats)
+    _print_table(offers, desc, total, url, json_output, stats=stats, max_pages=max_pages)
 
 
 @cli.command()
