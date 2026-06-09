@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 import click
+from tabulate import tabulate
 
 from olx_cli.auth import (
     _tokens_path,
@@ -50,8 +51,10 @@ def _print_table(offers, description, total, url, json_output, stats=None, max_p
         render_json(data)
         return
 
-    click.echo(f"Search: {description}")
-    click.echo(f"URL:    {url}")
+    pw = 8
+    indent = ' ' * pw
+    click.echo(f"{'Search:':<{pw}}{description}")
+    click.echo(f"{'URL:':<{pw}}{url}")
     if stats:
         pages = stats['pages_visited']
         pages_label = f"{pages} page{'s' * (pages != 1)}"
@@ -60,13 +63,11 @@ def _print_table(offers, description, total, url, json_output, stats=None, max_p
         skipped = stats['skipped']
         avg = stats['average']
         med = stats['median']
-        parts = [f"Found:  {total} offers"]
-        if skipped:
-            parts.append(f"(skipped {skipped} non-monetary)")
-        parts.append(f"across {pages_label}")
-        click.echo(' '.join(parts))
+        click.echo(f"{'Found:':<{pw}}{total} offers"
+                   f"{' (skipped ' + str(skipped) + ' non-monetary)' if skipped else ''}"
+                   f" across {pages_label}")
         if avg is not None and med is not None:
-            click.echo(f"Price (avg/median): {avg} zł / {med} zł")
+            click.echo(f"{'Price:':<{pw}}avg {avg} zł, median {med} zł")
     else:
         click.echo(f"Found:  {total} offers")
 
@@ -75,25 +76,12 @@ def _print_table(offers, description, total, url, json_output, stats=None, max_p
     if not offers:
         return
 
-    title_w = max(len(o.title) for o in offers)
-    title_w = max(title_w, len("Title"))
-    
-    def get_display_price(o):
-        return f"*{o.clean_price}" if o.is_negotiable else o.clean_price
-        
-    price_w = max(len(get_display_price(o)) for o in offers)
-    price_w = max(price_w, len("Price"))
-    city_w = max(len(o.city) for o in offers)
-    city_w = max(city_w, len("Location"))
-
-    header = f"{'Title':<{title_w}}  {'Price':>{price_w}}  {'Location':<{city_w}}"
-    sep = "-" * len(header)
-    click.echo(header)
-    click.echo(sep)
+    rows = []
     for o in offers:
-        click.echo(
-            f"{o.title:<{title_w}}  {get_display_price(o):>{price_w}}  {o.city:<{city_w}}"
-        )
+        price = f"*{o.clean_price}" if o.is_negotiable else o.clean_price
+        rows.append((o.title, price, o.city))
+
+    click.echo(tabulate(rows, headers=('Title', 'Price', 'Location'), tablefmt='simple'))
 
 
 @click.group()
