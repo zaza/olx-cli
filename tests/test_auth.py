@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
 from olx_cli.auth import decode_jwt
@@ -9,8 +7,6 @@ from olx_cli.auth import decode_jwt
 
 @pytest.fixture
 def fake_tokens_path(monkeypatch, tmp_path):
-    from olx_cli.auth import _tokens_path
-
     p = tmp_path / 'tokens.json'
     monkeypatch.setattr('olx_cli.auth._tokens_path', lambda: p)
     return p

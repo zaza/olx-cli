@@ -2,16 +2,10 @@ from __future__ import annotations
 
 import json
 
-import pytest
-import requests
-
 from olx_cli.city_resolver import (
     CityResolver,
     _deaccent,
     _fetch_sitemap,
-    _HEADERS,
-    _OLX_URL,
-    _SitemapParser,
     _sitemap_cache_path,
 )
 

@@ -18,8 +18,6 @@ COGNITO_REGION = "eu-west-1"
 COGNITO_URL = f"https://cognito-idp.{COGNITO_REGION}.amazonaws.com/"
 COGNITO_CLIENT_ID = "15gc33db15l8fi8fttfqjtoifn"
 
-log = logging.getLogger(__name__)
-
 _TOKENS_FILENAME = "tokens.json"
 
 def _session() -> requests.Session:

@@ -1,10 +1,8 @@
-import pytest
 import requests as req
 from bs4 import BeautifulSoup
 
 from olx_cli.query import build_url
 from olx_cli.scraper import OlxScraper, _DEFAULT_HEADERS, _PAGE_TIMEOUT
-
 
 _PAGINATION_FORWARD_LINK = """\
 <html><body>

@@ -211,13 +211,14 @@ class OlxScraper:
         if link:
             href = link.get("href")
             if href and href != "#":
-                return href
+                return str(href)
         wrapper = soup.select_one("div[data-testid=pagination-wrapper]")
         if wrapper:
             for a in wrapper.find_all("a", href=True):
-                m = re.search(r'[/?]page[=/](\d+)', a['href'])
+                href = str(a['href'])
+                m = re.search(r'[/?]page[=/](\d+)', href)
                 if m and int(m.group(1)) == page + 1:
-                    return a['href']
+                    return href
         return None
 
     @staticmethod
@@ -227,7 +228,8 @@ class OlxScraper:
             return 1
         max_p = 1
         for a in wrapper.find_all("a", href=True):
-            m = re.search(r'[/?]page[=/](\d+)', a['href'])
+            href = str(a['href'])
+            m = re.search(r'[/?]page[=/](\d+)', href)
             if m:
                 p = int(m.group(1))
                 if p > max_p:

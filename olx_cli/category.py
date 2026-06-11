@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import time
-import xml.etree.ElementTree as ET
+import xml.etree.ElementTree as ElementTree
 from pathlib import Path
 from typing import List, Optional
 from urllib.request import urlopen
@@ -34,7 +34,7 @@ def _is_stale() -> bool:
 
 def _fetch_categories() -> List[str]:
     resp = urlopen(SITEMAP_URL, timeout=15)
-    tree = ET.parse(resp)
+    tree = ElementTree.parse(resp)
     root = tree.getroot()
     ns = {"s": "http://www.sitemaps.org/schemas/sitemap/0.9"}
     categories: set[str] = set()

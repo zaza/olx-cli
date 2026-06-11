@@ -61,7 +61,7 @@ def authenticated_user(tmp_path_factory):
 
 def _offer_key(o):
     """Return a hashable key for comparing offers across APIs."""
-    return (o.title, o.price, o.url)
+    return o.title, o.price, o.url
 
 
 class TestMojolxVsUserSearch:
@@ -78,8 +78,8 @@ class TestMojolxVsUserSearch:
             f'API returned {len(api_offers)} offers, HTML returned {len(html_offers)}'
         )
 
-        api_set = frozenset(_offer_key(o) for o in api_offers)
-        html_set = frozenset(_offer_key(o) for o in html_offers)
+        api_set: frozenset = frozenset(_offer_key(o) for o in api_offers)
+        html_set: frozenset = frozenset(_offer_key(o) for o in html_offers)
 
         missing_in_html = api_set - html_set
         extra_in_html = html_set - api_set

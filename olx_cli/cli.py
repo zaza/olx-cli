@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 import json
-import re
-import sys
 from pathlib import Path
 
 import click
+import sys
 from tabulate import tabulate
 
 from olx_cli.auth import (
@@ -15,7 +14,7 @@ from olx_cli.auth import (
     logout as auth_logout,
     read_credentials,
 )
-from olx_cli.category import ensure_cached, get_cached, validate as validate_category
+from olx_cli.category import ensure_cached, validate as validate_category
 from olx_cli.client import get_profile, get_user_id_from_profile
 from olx_cli.offer import compute_stats
 from olx_cli.offer_submit import find_offer_files, read_offer, submit_offer, validate_offer
@@ -52,7 +51,6 @@ def _print_table(offers, description, total, url, json_output, stats=None, max_p
         return
 
     pw = 8
-    indent = ' ' * pw
     click.echo(f"{'Search:':<{pw}}{description}")
     click.echo(f"{'URL:':<{pw}}{url}")
     if stats:
@@ -85,8 +83,7 @@ def _print_table(offers, description, total, url, json_output, stats=None, max_p
 
 
 @click.group()
-@click.pass_context
-def cli(ctx):
+def cli():
     pass
 
 
@@ -107,18 +104,13 @@ def _login_with_browser(creds, json_output=False):
         click.echo(f"Error: {e}\n\nTry again in a few minutes.", err=True)
         raise click.Abort from e
 
-    user_id = None
-    if tokens.get('user_id'):
-        user_id = tokens['user_id']
-    else:
+    if not tokens.get('user_id'):
         profile = get_profile()
-        if profile:
-            user_id = get_user_id_from_profile(profile)
-            if user_id:
-                tokens['user_id'] = user_id
-                from olx_cli.auth import _tokens_path
-                import json
-                _tokens_path().write_text(json.dumps(tokens, ensure_ascii=False))
+        if profile and (user_id := get_user_id_from_profile(profile)):
+            tokens['user_id'] = user_id
+            from olx_cli.auth import _tokens_path
+            import json
+            _tokens_path().write_text(json.dumps(tokens, ensure_ascii=False))
 
     if json_output:
         render_json(tokens)
@@ -144,29 +136,29 @@ def login(browser, json_output):
                 err=True,
             )
             raise click.Abort
-        return _login_with_browser(creds, json_output=json_output)
-
-    email, password = creds
-
-    try:
-        auth_login(email, password)
-    except RuntimeError:
-        click.echo("Cognito login blocked (likely WAF). Falling back to browser login...", err=True)
-        return _login_with_browser(creds, json_output=json_output)
-
-    profile = get_profile()
-    user_id = get_user_id_from_profile(profile) if profile else None
-    if user_id:
-        tokens = get_tokens()
-        if tokens:
-            tokens['user_id'] = user_id
-            _tokens_path().write_text(json.dumps(tokens, ensure_ascii=False))
-
-    if json_output:
-        tokens = get_tokens()
-        render_json(tokens)
+        _login_with_browser(creds, json_output=json_output)
     else:
-        click.echo("Logged in successfully.")
+        email, password = creds
+
+        try:
+            auth_login(email, password)
+        except RuntimeError:
+            click.echo("Cognito login blocked (likely WAF). Falling back to browser login...", err=True)
+            _login_with_browser(creds, json_output=json_output)
+        else:
+            profile = get_profile()
+            user_id = get_user_id_from_profile(profile) if profile else None
+            if user_id:
+                tokens = get_tokens()
+                if tokens:
+                    tokens['user_id'] = user_id
+                    _tokens_path().write_text(json.dumps(tokens, ensure_ascii=False))
+
+            if json_output:
+                tokens = get_tokens()
+                render_json(tokens)
+            else:
+                click.echo("Logged in successfully.")
 
 
 @cli.command()
@@ -220,7 +212,7 @@ def _validate_category(category: str | None) -> str | None:
 @click.option("-m", "--min-price", type=int, help="Minimum price")
 @click.option("-M", "--max-price", type=int, help="Maximum price")
 @click.option("-c", "--category", help="Category slug (e.g. 'motoryzacja/samochody')")
-@click.option("-u", "--user", "user_id", help="User ID to show their offers (e.g. '2MwLv1')")
+@click.option("-u", "--user", "user_id", help="User ID to show their offers; 'me' for your own")
 @click.option(
     "--max-pages",
     type=int,
