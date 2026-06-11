@@ -18,6 +18,7 @@ from olx_cli.category import ensure_cached, validate as validate_category
 from olx_cli.client import get_profile, get_user_id_from_profile
 from olx_cli.offer import compute_stats
 from olx_cli.offer_submit import find_offer_files, read_offer, submit_offer, validate_offer
+from olx_cli.category_resolver import suggest_categories, format_category_path
 from olx_cli.query import build_url, describe
 from olx_cli.radius import KNOWN_RADII
 from olx_cli.scraper import OlxScraper, fetch_my_offers, fetch_user_offers_html
@@ -288,6 +289,28 @@ def categories():
         raise click.Abort
     for c in cats:
         click.echo(c)
+
+
+@cli.command()
+@click.argument('query')
+@click.option('--json', 'json_output', is_flag=True, help='Output as JSON')
+def suggest_category(query, json_output):
+    """Suggest categories matching a title or keywords."""
+    results = suggest_categories(query)
+    if results is None:
+        click.echo("Not logged in. Run 'olx-cli login' first.", err=True)
+        raise click.Abort
+
+    if json_output:
+        render_json(results)
+        return
+
+    if not results:
+        click.echo('No categories found.')
+        return
+
+    rows = [[format_category_path(r), r['id']] for r in results]
+    click.echo(tabulate(rows, headers=('Category', 'ID'), tablefmt='simple'))
 
 
 @cli.command()

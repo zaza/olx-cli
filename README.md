@@ -30,6 +30,12 @@ olx-cli search --user USER_ID
 olx-cli categories
 ```
 
+### 🔒 Suggest categories by title
+
+```sh
+olx-cli suggest-category "rayman legends ps4"
+```
+
 ### 🔒 Add offers
 
 Create offers from a text file:

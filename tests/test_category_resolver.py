@@ -2,7 +2,13 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-from olx_cli.category_resolver import CategoryResolver
+import requests
+
+from olx_cli.category_resolver import (
+    CategoryResolver,
+    format_category_path,
+    suggest_categories,
+)
 
 
 def _mock_suggest(*args, **kwargs):
@@ -33,3 +39,59 @@ class TestCategoryResolver:
     def test_empty_string(self):
         r = CategoryResolver()
         assert r.resolve('') is None
+
+
+class TestFormatCategoryPath:
+    def test_full_path(self):
+        item = {
+            'id': '2272',
+            'name': 'PlayStation',
+            'path': [
+                {'id': '99', 'name': 'Elektronika'},
+                {'id': '93', 'name': 'Gry i Konsole'},
+                {'id': '1603', 'name': 'Gry'},
+            ],
+        }
+        assert format_category_path(item) == 'Elektronika / Gry i Konsole / Gry / PlayStation'
+
+    def test_no_path(self):
+        item = {'id': '1651', 'name': 'Rowery górskie', 'path': []}
+        assert format_category_path(item) == 'Rowery górskie'
+
+    def test_single_parent(self):
+        item = {
+            'id': '1651',
+            'name': 'Rowery górskie',
+            'path': [{'id': '1648', 'name': 'Rowery'}],
+        }
+        assert format_category_path(item) == 'Rowery / Rowery górskie'
+
+
+class TestSuggestCategories:
+    @patch('olx_cli.category_resolver.get_access_token', return_value='fake-token')
+    @patch('olx_cli.category_resolver.requests.get')
+    def test_returns_data(self, mock_get, mock_token):
+        mock_get.return_value.status_code = 200
+        mock_get.return_value.json.return_value = {
+            'data': [{'id': '2272', 'name': 'PlayStation', 'path': []}],
+        }
+        result = suggest_categories('playstation')
+        assert result == [{'id': '2272', 'name': 'PlayStation', 'path': []}]
+
+    @patch('olx_cli.category_resolver.get_access_token', return_value='fake-token')
+    @patch('olx_cli.category_resolver.requests.get')
+    def test_empty_on_non_200(self, mock_get, mock_token):
+        mock_get.return_value.status_code = 500
+        result = suggest_categories('playstation')
+        assert result == []
+
+    @patch('olx_cli.category_resolver.get_access_token', return_value='fake-token')
+    @patch('olx_cli.category_resolver.requests.get', side_effect=requests.RequestException)
+    def test_empty_on_exception(self, mock_get, mock_token):
+        result = suggest_categories('playstation')
+        assert result == []
+
+    @patch('olx_cli.category_resolver.get_access_token', return_value=None)
+    def test_none_when_not_authenticated(self, mock_token):
+        result = suggest_categories('playstation')
+        assert result is None

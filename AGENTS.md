@@ -28,6 +28,10 @@ python3 -m olx_cli search --user USER_ID --json
 
 # List categories
 python3 -m olx_cli categories
+
+# Suggest categories by title/keywords
+python3 -m olx_cli suggest-category 'rayman legends ps4'
+python3 -m olx_cli suggest-category 'rower górski' --json
 ```
 
 ### Auth-protected commands
