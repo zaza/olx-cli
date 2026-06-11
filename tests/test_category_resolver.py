@@ -16,17 +16,17 @@ def _mock_suggest(*args, **kwargs):
 
 class TestCategoryResolver:
     @patch('olx_cli.category_resolver.CategoryResolver._suggest', side_effect=_mock_suggest)
-    def test_known_leaf_category(self):
+    def test_known_leaf_category(self, mock_suggest):
         r = CategoryResolver()
         assert r.resolve('sport-i-hobby/rowery/rowery-gorskie') == 1651
 
     @patch('olx_cli.category_resolver.CategoryResolver._suggest', side_effect=_mock_suggest)
-    def test_known_leaf_category_miejske(self):
+    def test_known_leaf_category_miejske(self, mock_suggest):
         r = CategoryResolver()
         assert r.resolve('sport-i-hobby/rowery/rowery-miejskie') == 1650
 
     @patch('olx_cli.category_resolver.CategoryResolver._suggest', return_value=[])
-    def test_unknown_category_returns_none(self):
+    def test_unknown_category_returns_none(self, mock_suggest):
         r = CategoryResolver()
         assert r.resolve('nonexistent') is None
 
