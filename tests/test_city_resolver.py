@@ -2,12 +2,25 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from olx_cli.city_resolver import (
     CityResolver,
     _deaccent,
     _fetch_sitemap,
     _sitemap_cache_path,
 )
+
+
+def _sitemap_available() -> bool:
+    try:
+        data = _fetch_sitemap()
+        return len(data) > 500
+    except Exception:
+        return False
+
+
+_SITEMAP_OK = _sitemap_available()
 
 
 class TestDeaccent:
@@ -42,6 +55,7 @@ class TestDeaccent:
         assert _deaccent('') == ''
 
 
+@pytest.mark.skipif(not _SITEMAP_OK, reason='OLX sitemap unreachable')
 class TestSitemapParser:
     @classmethod
     def setup_class(cls):
@@ -102,6 +116,7 @@ class TestSitemapSlugsMatchApi:
         'Częstochowa': 4765,
     }
 
+    @pytest.mark.skipif(not _SITEMAP_OK, reason='OLX sitemap unreachable')
     def test_confirmed_cities_resolve_correctly(self):
         r = CityResolver()
         for city, expected_id in self.CONFIRMED.items():
@@ -116,6 +131,7 @@ class TestSitemapSlugsMatchApi:
         assert r.resolve('') is None
 
 
+@pytest.mark.skipif(not _SITEMAP_OK, reason='OLX sitemap unreachable')
 class TestCityResolverIntegration:
     def test_cache(self):
         r = CityResolver()
