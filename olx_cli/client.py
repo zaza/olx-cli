@@ -4,7 +4,7 @@ import logging
 import re
 from typing import Optional
 
-import requests
+from curl_cffi import requests
 
 from olx_cli.auth import get_access_token, logout
 from olx_cli.scraper import _PAGE_TIMEOUT, _USER_AGENT
@@ -24,8 +24,9 @@ def get_user_id_from_profile(profile: dict) -> Optional[str]:
 def _headers(token: str) -> dict:
     return {
         "Authorization": f"Bearer {token}",
-        "User-Agent": _USER_AGENT,
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Accept": "application/json",
+        "Version": "1.0.0"
     }
 
 
@@ -35,8 +36,12 @@ def get(endpoint: str) -> Optional[dict]:
         return None
 
     resp = requests.get(
-        f"{_API_BASE}{endpoint}", headers=_headers(token), timeout=_PAGE_TIMEOUT
+        f"{_API_BASE}{endpoint}", 
+        headers=_headers(token), 
+        timeout=_PAGE_TIMEOUT, 
+        impersonate="chrome120"
     )
+    
     if resp.status_code == 401:
         log.warning("Token expired, clearing cache. Run 'olx-cli login' again.")
         logout()

@@ -6,7 +6,7 @@ import re
 from typing import List, Optional
 from urllib.parse import urljoin
 
-import requests
+from curl_cffi import requests
 from bs4 import BeautifulSoup
 
 from olx_cli.offer import BASE_URL, OlxOffer
@@ -15,14 +15,22 @@ _OFFER_COUNT_RE = re.compile(r"Znaleźliśmy\s+(ponad\s+)?(\d+)\s+ogłosze(ń|ni
 _PAGE_TIMEOUT = 30
 
 _USER_AGENT = (
-    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36"
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 )
 
 _DEFAULT_HEADERS = {
     "User-Agent": _USER_AGENT,
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
     "Accept-Language": "pl-PL,pl;q=0.9,en-US;q=0.8,en;q=0.7",
+    "Cache-Control": "max-age=0",
+    "Sec-Ch-Ua": '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+    "Sec-Ch-Ua-Mobile": "?0",
+    "Sec-Ch-Ua-Platform": '"Windows"',
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "none",
+    "Sec-Fetch-User": "?1",
+    "Upgrade-Insecure-Requests": "1"
 }
 
 _PRERENDERED_STATE_RE = re.compile(
@@ -59,7 +67,7 @@ def fetch_my_offers(
     while True:
         url = f"https://www.olx.pl/api/v1/users/me/offers/?offset={offset}"
         log.debug("Fetching my offers page %d", page)
-        resp = requests.get(url, headers=headers, timeout=_PAGE_TIMEOUT)
+        resp = requests.get(url, headers=headers, timeout=_PAGE_TIMEOUT, impersonate="chrome120")
         if resp.status_code != 200:
             log.warning("My offers API returned HTTP %s", resp.status_code)
             break
@@ -84,10 +92,7 @@ def fetch_my_offers(
 
 
 def _parse_ssr_user_offers(html: str) -> tuple[list[OlxOffer], int, int] | None:
-    """Parse __PRERENDERED_STATE__ from a user listing page.
-
-    Returns (offers, total_elements, total_pages) or None if SSR data is missing.
-    """
+    """Parse __PRERENDERED_STATE__ from a user listing page."""
     m = _PRERENDERED_STATE_RE.search(html)
     if not m:
         return None
@@ -117,7 +122,7 @@ def fetch_user_offers_html(
         if page > 1:
             url += f'?page={page}'
 
-        resp = requests.get(url, headers=_DEFAULT_HEADERS, timeout=_PAGE_TIMEOUT)
+        resp = requests.get(url, headers=_DEFAULT_HEADERS, timeout=_PAGE_TIMEOUT, impersonate="chrome120")
         resp.raise_for_status()
 
         result = _parse_ssr_user_offers(resp.text)
@@ -149,7 +154,7 @@ class OlxScraper:
 
         while True:
             log.debug("Fetching page %d: %s", page, url)
-            resp = requests.get(url, headers=_DEFAULT_HEADERS, timeout=_PAGE_TIMEOUT)
+            resp = requests.get(url, headers=_DEFAULT_HEADERS, timeout=_PAGE_TIMEOUT, impersonate="chrome120")
             resp.raise_for_status()
             soup = BeautifulSoup(resp.text, "lxml")
 
