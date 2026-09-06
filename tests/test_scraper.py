@@ -1,8 +1,12 @@
+import os
 import requests as req
 from bs4 import BeautifulSoup
+from unittest.mock import patch, MagicMock
 
 from olx_cli.query import build_url
 from olx_cli.scraper import OlxScraper, _DEFAULT_HEADERS, _PAGE_TIMEOUT
+
+OLX_CLI_USE_REAL_SITE = os.environ.get("OLX_CLI_USE_REAL_SITE", "false").lower() == "true"
 
 _PAGINATION_FORWARD_LINK = """\
 <html><body>
@@ -37,48 +41,142 @@ _NO_PAGINATION = """\
 
 class TestOlxScraper:
     def test_has_offers(self):
-        url = build_url("kierowce przyjme")
-        scrapper = OlxScraper(url, max_pages=1)
-        offers = scrapper.get_offers()
-        assert len(offers) > 0
+        if OLX_CLI_USE_REAL_SITE:
+            url = build_url("kierowce przyjme")
+            scrapper = OlxScraper(url, max_pages=1)
+            offers = scrapper.get_offers()
+            assert len(offers) > 0
+            return
+
+        with patch('requests.get') as mock_get:
+            # Mock a response with at least one offer
+            mock_resp = MagicMock()
+            mock_resp.status_code = 200
+            mock_resp.text = '<html><div data-testid="listing-grid"><div data-testid="l-card"><h4 data-testid="ad-title">Test Title</h4><p data-testid="ad-price">100 zł</p><a href="/offer/1">Link</a><p data-testid="location-date">Kraków - Today</p></div></div><span data-testid="total-count">Znaleźliśmy 1 ogłoszenie</span></html>'
+            mock_get.return_value = mock_resp
+
+            url = build_url("kierowce przyjme")
+            scrapper = OlxScraper(url, max_pages=1)
+            offers = scrapper.get_offers()
+            assert len(offers) > 0
 
     def test_pagination(self):
-        url = build_url("rower", photo_only=True)
-        one_page = OlxScraper(url, max_pages=1).get_offers()
-        two_pages = OlxScraper(url, max_pages=2).get_offers()
-        assert len(two_pages) > len(one_page), (
-            f"2 pages ({len(two_pages)}) should return more than 1 page ({len(one_page)})"
-        )
+        if OLX_CLI_USE_REAL_SITE:
+            url = build_url("rower", photo_only=True)
+            one_page = OlxScraper(url, max_pages=1).get_offers()
+            two_pages = OlxScraper(url, max_pages=2).get_offers()
+            assert len(two_pages) > len(one_page), (
+                f"2 pages ({len(two_pages)}) should return more than 1 page ({len(one_page)})"
+            )
+            return
+
+        with patch('requests.get') as mock_get:
+            # Mock page 1 and page 2
+            mock_resp1 = MagicMock()
+            mock_resp1.status_code = 200
+            mock_resp1.text = '<html><div data-testid="listing-grid"><div data-testid="l-card"><div><h6 data-testid="ad-title">T1</h6></div><div data-testid="ad-price">10 zł</div><a href="/o1">L1</a><div data-testid="ad-city">C1</div></div></div><a data-testid="pagination-forward" href="/page=2">Next</a><span data-testid="total-count">Znaleźliśmy 2 ogłoszenia</span></html>'
+            
+            mock_resp2 = MagicMock()
+            mock_resp2.status_code = 200
+            mock_resp2.text = '<html><div data-testid="listing-grid"><div data-testid="l-card"><div><h6 data-testid="ad-title">T2</h6></div><div data-testid="ad-price">20 zł</div><a href="/o2">L2</a><div data-testid="ad-city">C2</div></div></div></html>'
+            
+            mock_get.side_effect = [mock_resp1, mock_resp2]
+
+            url = build_url("rower", photo_only=True)
+            one_page = OlxScraper(url, max_pages=1).get_offers()
+            
+            mock_get.side_effect = [mock_resp1, mock_resp2]
+            two_pages = OlxScraper(url, max_pages=2).get_offers()
+            assert len(two_pages) > len(one_page), (
+                f"2 pages ({len(two_pages)}) should return more than 1 page ({len(one_page)})"
+            )
 
     def test_next_page_url(self):
-        url = build_url("rower")
-        resp = req.get(url, headers=_DEFAULT_HEADERS, timeout=_PAGE_TIMEOUT)
-        soup = BeautifulSoup(resp.text, "lxml")
-        next_url = OlxScraper._next_page_url(soup)
-        assert next_url is not None, "pagination-forward link should exist for high-volume query"
-        assert "page=2" in next_url or "?page=2" in next_url, f"expected page=2 in next_url, got {next_url}"
+        if OLX_CLI_USE_REAL_SITE:
+            url = build_url("rower")
+            resp = req.get(url, headers=_DEFAULT_HEADERS, timeout=_PAGE_TIMEOUT)
+            soup = BeautifulSoup(resp.text, "lxml")
+            next_url = OlxScraper._next_page_url(soup)
+            assert next_url is not None, "pagination-forward link should exist for high-volume query"
+            assert "page=2" in next_url or "?page=2" in next_url, f"expected page=2 in next_url, got {next_url}"
+            return
+
+        with patch('requests.get') as mock_get:
+            mock_resp = MagicMock()
+            mock_resp.status_code = 200
+            mock_resp.text = '<html><a data-testid="pagination-forward" href="/oferty/q-rower/?page=2">Next</a></html>'
+            mock_get.return_value = mock_resp
+
+            soup = BeautifulSoup(mock_resp.text, "lxml")
+            next_url = OlxScraper._next_page_url(soup)
+            assert next_url is not None, "pagination-forward link should exist for high-volume query"
+            assert "page=2" in next_url or "?page=2" in next_url, f"expected page=2 in next_url, got {next_url}"
 
     def test_all_fields_populated(self):
-        url = build_url("rower", photo_only=True)
-        scrapper = OlxScraper(url, max_pages=1)
-        offers = scrapper.get_offers()
-        assert len(offers) > 0
-        for o in offers:
-            assert o.title, "title must be non-empty"
-            assert o.price, "price must be non-empty"
-            assert o.url, "url must be non-empty"
-            assert o.city, "city must be non-empty"
+        if OLX_CLI_USE_REAL_SITE:
+            url = build_url("rower", photo_only=True)
+            scrapper = OlxScraper(url, max_pages=1)
+            offers = scrapper.get_offers()
+            assert len(offers) > 0
+            for o in offers:
+                assert o.title, "title must be non-empty"
+                assert o.price, "price must be non-empty"
+                assert o.url, "url must be non-empty"
+                assert o.city, "city must be non-empty"
+            return
+
+        with patch('requests.get') as mock_get:
+            mock_resp = MagicMock()
+            mock_resp.status_code = 200
+            mock_resp.text = '<html><div data-testid="listing-grid"><div data-testid="l-card"><h4>Title</h4><p data-testid="ad-price">100 zł</p><a href="/offer/1">URL</a><p data-testid="location-date">City - Today</p></div></div><span data-testid="total-count">Znaleźliśmy 1 ogłoszenie</span></html>'
+            mock_get.return_value = mock_resp
+
+            url = build_url("rower", photo_only=True)
+            scrapper = OlxScraper(url, max_pages=1)
+            offers = scrapper.get_offers()
+            assert len(offers) > 0
+            for o in offers:
+                assert o.title, "title must be non-empty"
+                assert o.price, "price must be non-empty"
+                assert o.url, "url must be non-empty"
+                assert o.city, "city must be non-empty"
 
     def test_photo_only_differs(self):
-        url_all = build_url("rower")
-        all_offers = OlxScraper(url_all, max_pages=1).get_offers()
+        if OLX_CLI_USE_REAL_SITE:
+            url_all = build_url("rower")
+            all_offers = OlxScraper(url_all, max_pages=1).get_offers()
 
-        url_photo = build_url("rower", photo_only=True)
-        photo_offers = OlxScraper(url_photo, max_pages=1).get_offers()
+            url_photo = build_url("rower", photo_only=True)
+            photo_offers = OlxScraper(url_photo, max_pages=1).get_offers()
 
-        titles_all = {o.title for o in all_offers}
-        titles_photo = {o.title for o in photo_offers}
-        assert titles_all != titles_photo, "photo filter should change results"
+            titles_all = {o.title for o in all_offers}
+            titles_photo = {o.title for o in photo_offers}
+            assert titles_all != titles_photo, "photo filter should change results"
+            return
+
+        with patch('requests.get') as mock_get:
+            # Mock for all offers
+            mock_resp_all = MagicMock()
+            mock_resp_all.status_code = 200
+            mock_resp_all.text = '<html><div data-testid="listing-grid"><div data-testid="l-card"><h4>Title 1</h4><p data-testid="ad-price">10 zł</p><a href="/o1">L1</a><p data-testid="location-date">C1 - T</p></div></div></html>'
+        
+            # Mock for photo offers
+            mock_resp_photo = MagicMock()
+            mock_resp_photo.status_code = 200
+            mock_resp_photo.text = '<html><div data-testid="listing-grid"><div data-testid="l-card"><h4>Title 2</h4><p data-testid="ad-price">20 zł</p><a href="/o2">L2</a><p data-testid="location-date">C2 - T</p></div></div></html>'
+        
+            mock_get.side_effect = [mock_resp_all, mock_resp_photo]
+
+            url_all = build_url("rower")
+            all_offers = OlxScraper(url_all, max_pages=1).get_offers()
+
+            url_photo = build_url("rower", photo_only=True)
+            photo_offers = OlxScraper(url_photo, max_pages=1).get_offers()
+
+            titles_all = {o.title for o in all_offers}
+            titles_photo = {o.title for o in photo_offers}
+            assert titles_all != titles_photo, "photo filter should change results"
+
 
 
 class TestPaginationDetection:
