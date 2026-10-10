@@ -87,6 +87,25 @@ After login, tokens are saved to `~/.cache/olx-cli/tokens.json` (keys: AccessTok
 
 Requires Playwright + Chromium for browser fallback: `pip install playwright && python3 -m playwright install chromium`
 
+### Auth findings (observed 2026-10, IP flagged)
+
+Both login paths can be blocked simultaneously. Diagnostics performed:
+
+- **Cognito primary** returns `HTTP 403 {"__type":"ForbiddenException","message":"Request not allowed due to WAF block."}`. This is AWS WAF rejecting the request *before* credentials are checked — not a bad-password error. `_refresh` hits the same endpoint, so **token refresh is blocked too**.
+- **Browser fallback**: Playwright reaches `login.olx.pl`, fills the form, and `#Login` becomes enabled — but submitting leaves the page on the login URL indefinitely (**no redirect, no error, no token**). DataDome intercepts the login POST. A DataDome block page appears intermittently ("Dlaczego zostałeś zablokowany?") naming the client IP and saying a bot operates from that network.
+- **Scraping (GET) is unaffected**: `curl_cffi` listing fetches still return 200 while login is blocked. Only the login endpoints (Cognito + Auth0/DataDome) enforce the bot rules.
+- **Likely cause**: the scraping traffic flags the IP; DataDome/WAF then block login from that IP. Block is usually temporary (cooldown), but may persist for a while.
+
+Remaining robustness gaps in `olx_cli/browser_auth.py` (browser fallback login):
+
+1. No popup/new-page handling — OAuth flows that open a new tab are not tracked.
+2. No DataDome block detection — a block still hangs for the full 180s timeout, then reports a generic "failed to extract tokens" instead of "blocked".
+3. Headless mode still waits the full timeout when auto-fill fails, though a human cannot appear.
+4. Auto-fill + auto-click is more bot-like than the intended manual login and more likely to be challenged.
+5. `wait_until='networkidle'` + the loose `_on_olx` success predicate can return before tokens are persisted (2s fixed wait).
+
+Mitigations: cool down / use a different IP for login; use a persistent browser context or a real Chrome profile; prefer manual login so a human clears any challenge; keep the scraping IP separate from the login IP and throttle scraping.
+
 ## Scraping — fetch layer (`olx_cli/http.py`, `olx_cli/scraper.py`)
 
 - **`requests` is blocked.** OLX's CloudFront layer 403s the plain Python TLS fingerprint (JA3/JA4). All HTTP goes through `olx_cli/http.py`, a thin `curl_cffi` wrapper with `impersonate="chrome"` — socket-level TLS/HTTP2 impersonation, no browser needed.
