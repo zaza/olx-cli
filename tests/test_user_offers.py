@@ -15,6 +15,12 @@ from olx_cli.scraper import fetch_my_offers, fetch_user_offers_html
 @pytest.fixture(scope='module')
 def authenticated_user(tmp_path_factory):
     """Login and return (access_token, user_id). Skips if no credentials.txt."""
+
+    if not OLX_CLI_USE_REAL_SITE:
+        # Mock mode: no network access needed, return synthetic values.
+        yield 'mock-access-token', 'mock-user-id'
+        return
+
     import json
     import re
 
@@ -88,59 +94,55 @@ class TestMojolxVsUserSearch:
             assert api_set == html_set
             return
 
-        with patch('olx_cli.client.requests.get'), patch('olx_cli.auth.requests.get'):
+        with patch('olx_cli.http.get') as mock_get:
             access_token, user_id = authenticated_user
-            # Mock API response for fetch_my_offers
+            # Mock API response for fetch_my_offers (OlxOffer.from_api_offer)
+            api_item = {
+                'title': 'Test Offer',
+                'url': 'https://www.olx.pl/d/test-offer-123/',
+                'params': [{'key': 'price', 'value': {'label': '100 zł'}}],
+                'location': {'city': {'name': 'Kraków'}},
+            }
             mock_api_resp = MagicMock()
             mock_api_resp.status_code = 200
             mock_api_resp.json.return_value = {
-                "data": [{
-                    "title": "Test Offer",
-                    "price": {"value": 100},
-                    "url": "https://www.olx.pl/d/test-offer-123/",
-                    "city": "Kraków"
-                }],
-                "links": {}
+                'data': [api_item],
+                'links': {},
             }
-            
-            # Since fetch_my_offers is in scraper.py, we need to mock requests.get in scraper
-            with patch('olx_cli.scraper.requests.get') as mock_scraper_get:
-                mock_scraper_get.return_value = mock_api_resp
-                
-                # Mock HTML response for fetch_user_offers_html
-                mock_html_resp = MagicMock()
-                mock_html_resp.status_code = 200
-                # Simplified __PRERENDERED_STATE__ for mock
-                state = {
-                    "userListing": {
-                        "userListing": {
-                            "ads": [{
-                                "title": "Test Offer",
-                                "price": {"value": 100},
-                                "url": "https://www.olx.pl/d/test-offer-123/",
-                                "city": "Kraków"
-                            }],
-                            "totalElements": 1,
-                            "totalPages": 1
-                        }
+
+            # Mock HTML response for fetch_user_offers_html (OlxOffer.from_user_listing_offer)
+            state = {
+                'userListing': {
+                    'userListing': {
+                        'ads': [{
+                            'title': 'Test Offer',
+                            'price': {'displayValue': '100 zł'},
+                            'url': 'https://www.olx.pl/d/test-offer-123/',
+                            'location': {'cityName': 'Kraków'},
+                        }],
+                        'totalElements': 1,
+                        'totalPages': 1,
                     }
                 }
-                import json
-                json_state = json.dumps(state)
-                # Escape for JS string
-                escaped_state = json_state.replace('"', '\\"')
-                mock_html_resp.text = f'window.__PRENDERED_STATE__="{escaped_state}";'
-                mock_scraper_get.side_effect = [mock_api_resp, mock_html_resp]
+            }
+            import json
+            json_state = json.dumps(state)
+            escaped_state = json_state.replace('"', '\\"')
+            mock_html_resp = MagicMock()
+            mock_html_resp.status_code = 200
+            mock_html_resp.text = f'window.__PRERENDERED_STATE__="{escaped_state}";'
 
-                api_offers, _ = fetch_my_offers(access_token, max_pages=5)
-                html_offers, _ = fetch_user_offers_html(user_id)
+            mock_get.side_effect = [mock_api_resp, mock_html_resp]
 
-                assert type(api_offers) == type(html_offers)
-                assert len(api_offers) == len(html_offers), (
-                    f'API returned {len(api_offers)} offers, HTML returned {len(html_offers)}'
-                )
+            api_offers, _ = fetch_my_offers(access_token, max_pages=5)
+            html_offers, _ = fetch_user_offers_html(user_id)
 
-                api_set: frozenset = frozenset(_offer_key(o) for o in api_offers)
-                html_set: frozenset = frozenset(_offer_key(o) for o in html_offers)
+            assert type(api_offers) == type(html_offers)
+            assert len(api_offers) == len(html_offers), (
+                f'API returned {len(api_offers)} offers, HTML returned {len(html_offers)}'
+            )
 
-                assert api_set == html_set
+            api_set: frozenset = frozenset(_offer_key(o) for o in api_offers)
+            html_set: frozenset = frozenset(_offer_key(o) for o in html_offers)
+
+            assert api_set == html_set

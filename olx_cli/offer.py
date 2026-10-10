@@ -83,9 +83,14 @@ class OlxOffer:
 
     @classmethod
     def from_user_listing_offer(cls, data: dict) -> OlxOffer:
-        price = data.get('price', {}).get('displayValue', '')
-        city = data.get('location', {}).get('cityName', '')
-        photos = data.get('photos', [])
+        # Job listings (Praca) have no price — displayValue lives elsewhere.
+        price_data = data.get('price')
+        price = price_data.get('displayValue', '') if isinstance(price_data, dict) else ''
+
+        location = data.get('location')
+        city = location.get('cityName', '') if isinstance(location, dict) else ''
+
+        photos = data.get('photos', []) or []
         photo = photos[0] if photos else None
         return cls(
             title=data.get('title', ''),

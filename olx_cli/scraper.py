@@ -2,16 +2,12 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 from typing import List, Optional
-from urllib.parse import urljoin
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
-import requests
-from bs4 import BeautifulSoup
+from olx_cli import http
+from olx_cli.offer import OlxOffer
 
-from olx_cli.offer import BASE_URL, OlxOffer
-
-_OFFER_COUNT_RE = re.compile(r"Znaleźliśmy\s+(ponad\s+)?(\d+)\s+ogłosze(ń|nia)")
 _PAGE_TIMEOUT = 30
 
 _USER_AGENT = (
@@ -25,8 +21,12 @@ _DEFAULT_HEADERS = {
     "Accept-Language": "pl-PL,pl;q=0.9,en-US;q=0.8,en;q=0.7",
 }
 
-_PRERENDERED_STATE_RE = re.compile(
-    r'window\.__PRENDERED_STATE__\s*=\s*"(.+?)"\s*;'
+_PRERENDERED_STATE_MARKER = '__PRERENDERED_STATE__'
+
+# Listing pages embed the same SSR blob; the state path differs by page type.
+_SSR_LISTING_PATHS = (
+    ("listing", "listing"),          # search results
+    ("userListing", "userListing"),  # user's offer listing
 )
 
 log = logging.getLogger(__name__)
@@ -59,7 +59,7 @@ def fetch_my_offers(
     while True:
         url = f"https://www.olx.pl/api/v1/users/me/offers/?offset={offset}"
         log.debug("Fetching my offers page %d", page)
-        resp = requests.get(url, headers=headers, timeout=_PAGE_TIMEOUT)
+        resp = http.get(url, headers=headers, timeout=_PAGE_TIMEOUT)
         if resp.status_code != 200:
             log.warning("My offers API returned HTTP %s", resp.status_code)
             break
@@ -83,22 +83,74 @@ def fetch_my_offers(
     return offers, page
 
 
-def _parse_ssr_user_offers(html: str) -> tuple[list[OlxOffer], int, int] | None:
-    """Parse __PRERENDERED_STATE__ from a user listing page.
+def _extract_ssr_state(html: str) -> dict | None:
+    """Decode the window.__PRERENDERED_STATE__ JS string literal.
+
+    The blob is a JS double-quoted literal holding serialized JSON, with
+    every inner quote escaped ('\"'). A regex like '"(.*?)";' can truncate
+    early on ad content that itself contains '";'. Use a backslash-aware
+    scan of the literal instead.
+    """
+    start = html.find(_PRERENDERED_STATE_MARKER)
+    if start == -1:
+        return None
+    eq = html.find('=', start)
+    q = html.find('"', eq) if eq != -1 else -1
+    if q == -1:
+        return None
+
+    i = q + 1
+    chars: list[str] = []
+    while i < len(html):
+        c = html[i]
+        if c == '\\':
+            chars.append(c)
+            if i + 1 < len(html):
+                chars.append(html[i + 1])
+                i += 2
+                continue
+            i += 1
+            continue
+        if c == '"':  # end of the JS string literal
+            raw = ''.join(chars)
+            try:
+                return json.loads(json.loads('"' + raw + '"'))
+            except (json.JSONDecodeError, ValueError):
+                log.warning('Failed to decode __PRERENDERED_STATE__')
+                return None
+        chars.append(c)
+        i += 1
+
+    log.warning('__PRERENDERED_STATE__ string terminator not found')
+    return None
+
+
+def _find_listing(state: dict) -> dict | None:
+    for path in _SSR_LISTING_PATHS:
+        node: object = state
+        for key in path:
+            node = node.get(key) if isinstance(node, dict) else None
+            if node is None:
+                break
+        if isinstance(node, dict):
+            return node
+    return None
+
+
+def _parse_ssr_listing(html: str) -> tuple[list[OlxOffer], int, int] | None:
+    """Parse a listing from the SSR state blob (search or user pages).
 
     Returns (offers, total_elements, total_pages) or None if SSR data is missing.
     """
-    m = _PRERENDERED_STATE_RE.search(html)
-    if not m:
+    state = _extract_ssr_state(html)
+    if state is None:
         return None
-
-    raw = m.group(1)
-    js_value = json.loads('"' + raw + '"')
-    state = json.loads(js_value)
-    listing = state.get('userListing', {}).get('userListing', {})
-    ads = listing.get('ads', [])
+    listing = _find_listing(state)
+    if listing is None:
+        return None
+    ads = listing.get("ads", [])
     offers = [OlxOffer.from_user_listing_offer(ad) for ad in ads]
-    return offers, listing.get('totalElements', 0), listing.get('totalPages', 0)
+    return offers, listing.get("totalElements", 0), listing.get("totalPages", 0)
 
 
 def fetch_user_offers_html(
@@ -117,10 +169,10 @@ def fetch_user_offers_html(
         if page > 1:
             url += f'?page={page}'
 
-        resp = requests.get(url, headers=_DEFAULT_HEADERS, timeout=_PAGE_TIMEOUT)
+        resp = http.get(url, headers=_DEFAULT_HEADERS, timeout=_PAGE_TIMEOUT)
         resp.raise_for_status()
 
-        result = _parse_ssr_user_offers(resp.text)
+        result = _parse_ssr_listing(resp.text)
         if result is None:
             log.warning('__PRERENDERED_STATE__ not found on user page %d', page)
             return offers, page - 1
@@ -136,6 +188,15 @@ def fetch_user_offers_html(
     return offers, page
 
 
+def _page_url(base: str, page: int) -> str:
+    """Append ?page=N to a listing URL, preserving existing query params."""
+    parts = urlsplit(base)
+    params = parse_qsl(parts.query, keep_blank_values=True)
+    params = [(k, v) for k, v in params if k != "page"]
+    params.append(("page", str(page)))
+    return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(params), parts.fragment))
+
+
 class OlxScraper:
     def __init__(self, start_url: str, max_pages: Optional[int] = 5) -> None:
         self._start_url = start_url
@@ -143,95 +204,31 @@ class OlxScraper:
         self.pages_visited = 0
 
     def get_offers(self) -> List[OlxOffer]:
-        url = self._start_url
-        page = 1
+        """Scrape offers from an OLX listing page (SSR state based)."""
         offers: List[OlxOffer] = []
+        page = 1
 
         while True:
+            url = self._start_url if page == 1 else _page_url(self._start_url, page)
             log.debug("Fetching page %d: %s", page, url)
-            resp = requests.get(url, headers=_DEFAULT_HEADERS, timeout=_PAGE_TIMEOUT)
+            resp = http.get(url, headers=_DEFAULT_HEADERS, timeout=_PAGE_TIMEOUT)
             resp.raise_for_status()
-            soup = BeautifulSoup(resp.text, "lxml")
 
-            page_offers = soup.select(
-                "div[data-testid=listing-grid] > div[data-testid=l-card]"
-            )
-
-            if page == 1:
-                total = self._parse_offer_count(soup)
-                log.info("Found %d total offers", total)
-                if total == 0:
-                    return []
-                if not self._has_next_page(soup, page) and page_offers:
-                    count = min(total, len(page_offers))
-                    page_offers = page_offers[:count]
-
-            for el in page_offers:
-                offers.append(OlxOffer.from_element(el))
-
-            if not self._has_next_page(soup, page):
+            result = _parse_ssr_listing(resp.text)
+            if result is None:
+                log.warning("__PRERENDERED_STATE__ not found on page %d", page)
                 break
+            page_offers, total_elements, total_pages = result
+            offers.extend(page_offers)
 
+            if not page_offers or total_pages == 0:
+                break
+            if page >= total_pages:
+                break
             if self._max_pages is not None and page >= self._max_pages:
                 log.info("Reached max pages (%d)", self._max_pages)
                 break
-
-            next_url = self._next_page_url(soup, page)
-            if not next_url:
-                break
-            url = urljoin(BASE_URL, next_url)
             page += 1
+
         self.pages_visited = page
-
         return offers
-
-    @staticmethod
-    def _parse_offer_count(soup: BeautifulSoup) -> int:
-        el = soup.select_one("span[data-testid=total-count]")
-        if el is None:
-            return 0
-        text = el.get_text(separator=" ", strip=True)
-        m = _OFFER_COUNT_RE.match(text)
-        if m:
-            return int(m.group(2))
-        return 0
-
-    @staticmethod
-    def _has_next_page(soup: BeautifulSoup, page: int = 1) -> bool:
-        link = soup.select_one("a[data-testid=pagination-forward]")
-        if link:
-            href = link.get("href")
-            if href and href != "#":
-                return True
-        return OlxScraper._max_page_num(soup) > page
-
-    @staticmethod
-    def _next_page_url(soup: BeautifulSoup, page: int = 1) -> Optional[str]:
-        link = soup.select_one("a[data-testid=pagination-forward]")
-        if link:
-            href = link.get("href")
-            if href and href != "#":
-                return str(href)
-        wrapper = soup.select_one("div[data-testid=pagination-wrapper]")
-        if wrapper:
-            for a in wrapper.find_all("a", href=True):
-                href = str(a['href'])
-                m = re.search(r'[/?]page[=/](\d+)', href)
-                if m and int(m.group(1)) == page + 1:
-                    return href
-        return None
-
-    @staticmethod
-    def _max_page_num(soup: BeautifulSoup) -> int:
-        wrapper = soup.select_one("div[data-testid=pagination-wrapper]")
-        if not wrapper:
-            return 1
-        max_p = 1
-        for a in wrapper.find_all("a", href=True):
-            href = str(a['href'])
-            m = re.search(r'[/?]page[=/](\d+)', href)
-            if m:
-                p = int(m.group(1))
-                if p > max_p:
-                    max_p = p
-        return max_p

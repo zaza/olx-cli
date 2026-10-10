@@ -65,7 +65,7 @@ class TestCliOutput:
 
     def test_table_output_contains_found(self, runner):
         result = runner.invoke(cli, [
-            "search", "kierowce przyjme", "--max-pages", "1",
+            "search", "rower", "--max-pages", "1",
         ])
         if result.exit_code != 0:
             pytest.skip("network-dependent, skip if offline")

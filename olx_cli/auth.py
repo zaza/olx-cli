@@ -7,8 +7,7 @@ import time
 from pathlib import Path
 from typing import Optional
 
-import requests
-
+from olx_cli import http
 from olx_cli.cache import _cache_dir
 from olx_cli.scraper import _USER_AGENT, _DEFAULT_HEADERS
 
@@ -20,8 +19,8 @@ COGNITO_CLIENT_ID = "15gc33db15l8fi8fttfqjtoifn"
 
 _TOKENS_FILENAME = "tokens.json"
 
-def _session() -> requests.Session:
-    s = requests.Session()
+def _session() -> http.Session:
+    s = http.new_session()
     s.headers.update(_DEFAULT_HEADERS)
     # Visit front page to prime cookies / WAF
     s.get("https://www.olx.pl/", timeout=15)
@@ -60,7 +59,7 @@ def decode_jwt(token: str) -> dict:
     return json.loads(base64.urlsafe_b64decode(parts[1] + "==="))
 
 
-def _cognito_post(body: dict) -> requests.Response:
+def _cognito_post(body: dict) -> http.Response:
     sess = _session()
     return sess.post(COGNITO_URL, json=body, headers=_cognito_headers(), timeout=15)
 
@@ -125,7 +124,7 @@ def _refresh(refresh_token: Optional[str]) -> Optional[dict]:
         _save_tokens(result)
 
         return result
-    except requests.RequestException as e:
+    except http.RequestException as e:
         log.warning("Token refresh request failed: %s", e)
         return None
 

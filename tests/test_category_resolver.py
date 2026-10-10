@@ -2,8 +2,7 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-import requests
-
+from olx_cli import http
 from olx_cli.category_resolver import (
     CategoryResolver,
     format_category_path,
@@ -69,7 +68,7 @@ class TestFormatCategoryPath:
 
 class TestSuggestCategories:
     @patch('olx_cli.category_resolver.get_access_token', return_value='fake-token')
-    @patch('olx_cli.category_resolver.requests.get')
+    @patch('olx_cli.http.get')
     def test_returns_data(self, mock_get, mock_token):
         mock_get.return_value.status_code = 200
         mock_get.return_value.json.return_value = {
@@ -79,14 +78,14 @@ class TestSuggestCategories:
         assert result == [{'id': '2272', 'name': 'PlayStation', 'path': []}]
 
     @patch('olx_cli.category_resolver.get_access_token', return_value='fake-token')
-    @patch('olx_cli.category_resolver.requests.get')
+    @patch('olx_cli.http.get')
     def test_empty_on_non_200(self, mock_get, mock_token):
         mock_get.return_value.status_code = 500
         result = suggest_categories('playstation')
         assert result == []
 
     @patch('olx_cli.category_resolver.get_access_token', return_value='fake-token')
-    @patch('olx_cli.category_resolver.requests.get', side_effect=requests.RequestException)
+    @patch('olx_cli.http.get', side_effect=http.RequestException)
     def test_empty_on_exception(self, mock_get, mock_token):
         result = suggest_categories('playstation')
         assert result == []

@@ -4,8 +4,7 @@ import logging
 import uuid
 from pathlib import Path
 
-import requests
-
+from olx_cli import http
 from olx_cli.auth import get_access_token
 from olx_cli.category_resolver import CategoryResolver
 from olx_cli.city_resolver import CityResolver
@@ -169,7 +168,7 @@ def submit_offer(data: dict) -> dict:
     }
 
     try:
-        resp = requests.post(
+        resp = http.post(
             _POSTING_API_URL, json=payload, headers=headers, timeout=30
         )
         if resp.status_code in (200, 201):
@@ -178,5 +177,5 @@ def submit_offer(data: dict) -> dict:
             raise RuntimeError('Session expired. Run olx-cli login again.')
         detail = resp.text[:500]
         raise RuntimeError(f'HTTP {resp.status_code}: {detail}')
-    except requests.RequestException as e:
+    except http.RequestException as e:
         raise RuntimeError(f'Failed to submit offer: {e}')

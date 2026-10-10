@@ -4,8 +4,7 @@ import logging
 import re
 from typing import Optional
 
-import requests
-
+from olx_cli import http
 from olx_cli.auth import get_access_token, logout
 from olx_cli.scraper import _PAGE_TIMEOUT, _USER_AGENT
 
@@ -34,7 +33,7 @@ def get(endpoint: str) -> Optional[dict]:
     if not token:
         return None
 
-    resp = requests.get(
+    resp = http.get(
         f"{_API_BASE}{endpoint}", headers=_headers(token), timeout=_PAGE_TIMEOUT
     )
     if resp.status_code == 401:

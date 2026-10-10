@@ -7,8 +7,7 @@ import time
 import unicodedata
 from html.parser import HTMLParser
 
-import requests
-
+from olx_cli import http
 from olx_cli.cache import _cache_dir
 
 log = logging.getLogger(__name__)
@@ -71,7 +70,7 @@ def _save_sitemap_cache(slug_map: dict[str, str]) -> None:
 
 
 def _fetch_sitemap() -> dict[str, str]:
-    resp = requests.get(
+    resp = http.get(
         f'{_OLX_URL}/sitemap/regions/',
         headers=_HEADERS,
         timeout=15,
@@ -160,7 +159,7 @@ class CityResolver:
         try:
             seen: set[str] = set()
             for offset in range(0, 1050, 50):
-                resp = requests.get(
+                resp = http.get(
                     f'{_OLX_URL}/api/v1/offers/',
                     params={'query': '', 'city': slug, 'offset': offset, 'limit': 50},
                     headers=_HEADERS,
@@ -184,7 +183,7 @@ class CityResolver:
             log.warning('City pagination lookup failed for %s', city, exc_info=True)
 
         try:
-            resp = requests.get(
+            resp = http.get(
                 f'{_OLX_URL}/api/v1/offers/',
                 params={'query': slug, 'limit': 10},
                 headers=_HEADERS,

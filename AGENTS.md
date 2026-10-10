@@ -2,7 +2,7 @@
 
 ## Project overview
 
-A CLI tool that scrapes OLX.pl (Polish classifieds) for offers matching a search query. Uses Click for CLI, requests + BeautifulSoup for scraping.
+A CLI tool that scrapes OLX.pl (Polish classifieds) for offers matching a search query. Uses Click for CLI, `curl_cffi` (Chrome TLS impersonation; plain `requests` gets HTTP 403) + `__PRERENDERED_STATE__` SSR JSON parsing for scraping.
 
 ## Setup
 
@@ -23,8 +23,9 @@ python3 -m olx_cli search rower -l krakow --json
 # With category
 python3 -m olx_cli search fiat -c motoryzacja/samochody -l krakow --json
 
-# By user ID (scraped from SSR HTML, no auth needed)
-python3 -m olx_cli search --user USER_ID --json
+# By user ID (short slug copied from any offer's seller link, e.g. `Qsl`)
+# Numeric user IDs no longer resolve (404) — grab the short `uzytkownik/<slug>/` slug.
+python3 -m olx_cli search --user USER_SLUG --json
 
 # List categories
 python3 -m olx_cli categories
@@ -85,6 +86,16 @@ olx-cli login --browser && olx-cli search --user $(olx-cli me --json | jq -r '.u
 After login, tokens are saved to `~/.cache/olx-cli/tokens.json` (keys: AccessToken, RefreshToken, IdToken).
 
 Requires Playwright + Chromium for browser fallback: `pip install playwright && python3 -m playwright install chromium`
+
+## Scraping — fetch layer (`olx_cli/http.py`, `olx_cli/scraper.py`)
+
+- **`requests` is blocked.** OLX's CloudFront layer 403s the plain Python TLS fingerprint (JA3/JA4). All HTTP goes through `olx_cli/http.py`, a thin `curl_cffi` wrapper with `impersonate="chrome"` — socket-level TLS/HTTP2 impersonation, no browser needed.
+- **Page structure changed.** Search AND user-listing pages no longer render `div[data-testid=listing-grid]` cards. They embed a `window.__PRERENDERED_STATE__` JS string literal holding serialized JSON; ads live under `listing.listing.ads` (search) or `userListing.userListing.ads` (user pages).
+- `OlxScraper.get_offers()` parses SSR state directly (`_parse_ssr_listing`, `_extract_ssr_state`) — no BeautifulSoup. Pagination: append `?page=N` (via `_page_url`, preserves filters), stop at SSR `totalPages` or `max_pages`.
+- `_extract_ssr_state` uses a backslash-aware scanner instead of a regex: ad content can contain `";`, which truncates naive `"(.*?)";` patterns.
+- **Job listings** (`Praca` category) have `price: null` — `OlxOffer.from_user_listing_offer` tolerates this (empty price).
+- Playwright remains for auth login only (browser fallback).
+- User listing URL: `https://www.olx.pl/oferty/uzytkownik/<SLUG>/` where `<SLUG>` is the short ID from an ad page's seller link. Numeric `user.id`/`uuid` from SSR do NOT resolve (404).
 
 ## Add offers — technical details
 

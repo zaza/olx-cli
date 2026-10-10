@@ -3,8 +3,7 @@ from __future__ import annotations
 import logging
 import unicodedata
 
-import requests
-
+from olx_cli import http
 from olx_cli.auth import get_access_token
 
 log = logging.getLogger(__name__)
@@ -23,7 +22,7 @@ def suggest_categories(query: str) -> list[dict] | None:
             'X-Client': 'DESKTOP',
             'X-Platform-Type': 'mobile-html5',
         }
-        resp = requests.get(_API_URL, params={'q': query}, headers=headers, timeout=10)
+        resp = http.get(_API_URL, params={'q': query}, headers=headers, timeout=10)
         if resp.status_code == 200:
             return resp.json().get('data', [])
     except Exception:
